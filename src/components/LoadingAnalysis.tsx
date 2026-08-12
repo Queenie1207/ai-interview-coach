@@ -1,4 +1,10 @@
-export function LoadingAnalysis() {
+type LoadingAnalysisProps = {
+  message?: string;
+};
+
+export function LoadingAnalysis({
+  message = "Analyzing Resume and Job Description...",
+}: LoadingAnalysisProps) {
   return (
     <div
       role="status"
@@ -7,7 +13,7 @@ export function LoadingAnalysis() {
     >
       <div className="flex items-center gap-3">
         <span className="h-5 w-5 animate-spin rounded-full border-2 border-teal-200 border-t-teal-700" />
-        <p className="font-medium">Analyzing Resume and Job Description...</p>
+        <p className="font-medium">{message}</p>
       </div>
     </div>
   );

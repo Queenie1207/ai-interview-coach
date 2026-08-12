@@ -24,9 +24,19 @@ export function AnalysisResultPanel({ result }: AnalysisResultPanelProps) {
   return (
     <section className="grid gap-4">
       <article className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-          Overall Match Score
-        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+              Mock Analysis
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-zinc-950">
+              Overall Match Score
+            </h2>
+          </div>
+          <p className="max-w-xl text-sm leading-6 text-zinc-600">
+            This is fixed mock data for Phase 2A and is not generated from the parsed resume text.
+          </p>
+        </div>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <p className="text-5xl font-semibold text-zinc-950">{result.matchScore}</p>
           <p className="rounded-md bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800">

@@ -6,9 +6,11 @@ import { AnalyzeButton } from "@/components/AnalyzeButton";
 import { Header } from "@/components/Header";
 import { JobDescriptionForm } from "@/components/JobDescriptionForm";
 import { LoadingAnalysis } from "@/components/LoadingAnalysis";
+import { ResumeParseResult } from "@/components/ResumeParseResult";
 import { ResumeUploader } from "@/components/ResumeUploader";
 import { mockAnalysisResult } from "@/data/mockAnalysis";
 import type { AnalysisResult, AnalysisStatus } from "@/types/analysis";
+import type { ParsedResume, ResumeParseResponse } from "@/types/resumeParse";
 import { validateResumeFile } from "@/utils/fileValidation";
 
 type FormErrors = {
@@ -24,12 +26,6 @@ type JobInputs = {
 
 const MIN_JOB_DESCRIPTION_LENGTH = 50;
 
-function waitForMockAnalysis(): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, 1500);
-  });
-}
-
 export default function Home() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobInputs, setJobInputs] = useState<JobInputs>({
@@ -40,6 +36,8 @@ export default function Home() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<AnalysisStatus>("idle");
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [parsedResume, setParsedResume] = useState<ParsedResume | null>(null);
+  const [resumeParseError, setResumeParseError] = useState<string | null>(null);
 
   const isLoading = status === "loading";
 
@@ -52,11 +50,19 @@ export default function Home() {
     }
 
     setResumeFile(file);
+    setParsedResume(null);
+    setResumeParseError(null);
+    setAnalysisResult(null);
+    setStatus("idle");
     setErrors((currentErrors) => ({ ...currentErrors, resume: undefined }));
   }
 
   function handleResumeRemove() {
     setResumeFile(null);
+    setParsedResume(null);
+    setResumeParseError(null);
+    setAnalysisResult(null);
+    setStatus("idle");
     setErrors((currentErrors) => ({ ...currentErrors, resume: undefined }));
   }
 
@@ -95,11 +101,38 @@ export default function Home() {
       return;
     }
 
+    if (!resumeFile) {
+      return;
+    }
+
     setAnalysisResult(null);
+    setParsedResume(null);
+    setResumeParseError(null);
     setStatus("loading");
-    await waitForMockAnalysis();
-    setAnalysisResult(mockAnalysisResult);
-    setStatus("success");
+
+    try {
+      const formData = new FormData();
+      formData.append("resume", resumeFile);
+
+      const response = await fetch("/api/resume/parse", {
+        method: "POST",
+        body: formData,
+      });
+      const responseBody = (await response.json()) as ResumeParseResponse;
+
+      if (!responseBody.success) {
+        setResumeParseError(responseBody.error.message);
+        setStatus("idle");
+        return;
+      }
+
+      setParsedResume(responseBody.data);
+      setAnalysisResult(mockAnalysisResult);
+      setStatus("success");
+    } catch {
+      setResumeParseError("We could not parse this resume. Please try again.");
+      setStatus("idle");
+    }
   }
 
   return (
@@ -130,7 +163,8 @@ export default function Home() {
           <AnalyzeButton disabled={isLoading} />
         </form>
 
-        {isLoading ? <LoadingAnalysis /> : null}
+        {isLoading ? <LoadingAnalysis message="Parsing resume PDF..." /> : null}
+        <ResumeParseResult parsedResume={parsedResume} error={resumeParseError} />
         {status === "success" && analysisResult ? (
           <AnalysisResultPanel result={analysisResult} />
         ) : null}
