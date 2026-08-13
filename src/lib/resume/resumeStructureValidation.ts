@@ -1,0 +1,1 @@
+export const MAX_RESUME_TEXT_LENGTH = 100_000;

@@ -25,6 +25,21 @@ AI Interview Coach is an interview-prep prototype for resume and job-description
 
 Phase 2A uses `pdf-parse` for server-side PDF text extraction. It is a maintained TypeScript package built on `pdfjs-dist`, works in Node.js, and does not require sending resume files to an external service.
 
+## Phase 2B
+
+Phase 2B sends Phase 2A's extracted text to `POST /api/resume/structure`. On the server, fixed extraction instructions are a system message and the resume text is a separate user message. Groq Chat Completions produces strict JSON Schema output, then Zod runtime-validates it as `ResumeData`.
+
+The schema includes profile, skills, languages, experience, education, projects, activities, certifications, and additional sections. The prompt prohibits invented facts, wholesale translation, scoring, JD matching, and interview questions. Groq is server-only; resume text is neither logged nor persisted. JD matching, Agents, RAG, databases, OCR, and automatic retry remain out of scope. Free API plans have provider rate and token limits.
+
+Copy `.env.example` to `.env.local` and supply your own server-side key:
+
+```text
+GROQ_API_KEY=
+GROQ_MODEL=openai/gpt-oss-120b
+```
+
+The API accepts `application/json` containing `{ "extractedText": "..." }`. Success is `{ "success": true, "data": { ... } }`; failure is `{ "success": false, "error": { "code": "...", "message": "..." } }`. Validation failures use 400/413/415/422, missing configuration uses 503, and safe upstream or invalid-output failures use 502.
+
 ## Install
 
 ```bash
@@ -48,3 +63,12 @@ npm run lint
 ```bash
 npm run build
 ```
+
+## Test and local Phase 2B check
+
+```bash
+npm test
+npm run dev
+```
+
+With `.env.local` configured, upload a non-sensitive text PDF, enter at least 50 JD characters, and submit. The PDF remains in memory; structured cards appear after both APIs succeed. The JD is not sent to Groq.

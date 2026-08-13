@@ -8,6 +8,10 @@ This phase provides a responsive home page where a user selects a resume PDF, en
 
 Phase 2A adds real PDF upload and text extraction. The selected PDF is sent to a Next.js Route Handler, parsed in memory, and returned as plain text JSON for display in the browser. The app still does not use an LLM, AI API, database, login, RAG, MCP, Tool Calling, or OCR.
 
+## Phase 2B scope
+
+Phase 2B converts extracted text to typed resume data. The browser calls the existing parser, then posts only its returned text to `POST /api/resume/structure`. Groq is called only by the server. A fixed prompt controls extraction, strict JSON Schema constrains Chat Completions output, and Zod independently validates it. `ResumeData` is inferred from `ResumeSchema`.
+
 ## Home page
 
 The page contains a header, resume uploader, job-description form, analysis action, loading state, and mock-result section.
@@ -20,11 +24,20 @@ The page contains a header, resume uploader, job-description form, analysis acti
 - `AnalyzeButton` renders the primary form action.
 - `LoadingAnalysis` presents in-progress feedback.
 - `ResumeParseResult` displays the parsed resume metadata and collapsible text preview.
+- `StructuredResumeResult` displays non-empty structured sections as responsive cards.
 - `AnalysisResultPanel` renders the analysis cards.
 
 ## State flow
 
-The client page owns the selected `File`, input values, field errors, parsed resume result, parse error, mock analysis result, and `idle` / `loading` / `success` analysis status with React `useState`. Submission validates the form. Valid data clears old parse and mock results, enters `loading`, sends the PDF to the parser route, then displays the parsed resume text and fixed mock analysis result on success. Inputs are disabled while loading.
+The client page owns form and result state. Valid submission clears old results, calls the parser, and only on success calls the structure route. Inputs stay disabled through both requests. Parse failure stops Phase 2B; structure failure clears old structured data and allows retry. The Phase 1 analysis is visibly labeled fixed mock data.
+
+## Phase 2B data flow and API
+
+Browser -> `POST /api/resume/parse` -> extracted text -> `POST /api/resume/structure` -> Groq Chat Completions strict JSON Schema -> Zod `ResumeSchema` -> `ResumeData` -> cards.
+
+The structure route requires `application/json` with a non-empty string `extractedText`, limited to 100,000 characters. It returns the shared success/data or success/error envelope. Codes are `INVALID_CONTENT_TYPE`, `INVALID_REQUEST`, `EMPTY_RESUME_TEXT`, `RESUME_TEXT_TOO_LARGE`, `AI_NOT_CONFIGURED`, `AI_UPSTREAM_ERROR`, `AI_INVALID_OUTPUT`, and `INTERNAL_ERROR`.
+
+`GROQ_API_KEY` and centrally read `GROQ_MODEL` are server variables. The resume is a user message separate from the system prompt and is never logged or persisted. Rate and token limits are provider-dependent.
 
 ## Phase 2A data flow
 
@@ -67,4 +80,4 @@ Analysis types live in `src/types`; the fixed phase-one analysis result lives in
 
 ## Deferred work
 
-Future phases may add OCR, an LLM, RAG, and Tool Calling. None are implemented in Phase 2A.
+Future phases may add JD matching, interview analysis, OCR, RAG, and Tool Calling. None are implemented in Phase 2B.
