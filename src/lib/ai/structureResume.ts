@@ -1,13 +1,18 @@
 import "server-only";
-import { getGroqConfiguration } from "@/lib/ai/groqClient";
+import OpenAI from "openai";
+import { getGeminiConfiguration } from "@/lib/ai/geminiClient";
 import { RESUME_STRUCTURE_SYSTEM_PROMPT } from "@/lib/prompts/resumeStructurePrompt";
 import { ResumeSchema, type ResumeData } from "@/lib/schemas/resumeSchema";
 import { normalizeResumeData } from "@/lib/resume/normalizeResumeData";
 
+export class AiAuthenticationError extends Error {}
+export class AiRateLimitedError extends Error {}
 export class AiUpstreamError extends Error {}
+export class AiEmptyOutputError extends Error {}
+export class AiInvalidJsonError extends Error {}
 export class AiInvalidOutputError extends Error {}
 
-export const RESUME_STRUCTURE_MAX_COMPLETION_TOKENS = 4096;
+export const RESUME_STRUCTURE_MAX_COMPLETION_TOKENS = 8192;
 export const RESUME_STRUCTURE_REASONING_EFFORT = "low" as const;
 
 export const resumeJsonSchema = {
@@ -35,7 +40,7 @@ function object(properties: Record<string, object>) {
 }
 
 export async function structureResume(extractedText: string): Promise<ResumeData> {
-  const { client, model } = getGroqConfiguration();
+  const { client, model } = getGeminiConfiguration();
   let completion;
   try {
     completion = await client.chat.completions.create({
@@ -52,15 +57,38 @@ export async function structureResume(extractedText: string): Promise<ResumeData
         json_schema: { name: "resume_data", strict: true, schema: resumeJsonSchema },
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof OpenAI.AuthenticationError) {
+      throw new AiAuthenticationError("The AI provider rejected authentication.");
+    }
+    if (error instanceof OpenAI.RateLimitError) {
+      throw new AiRateLimitedError("The AI provider rate limit was reached.");
+    }
     throw new AiUpstreamError("The AI provider request failed.");
   }
 
   const content = completion.choices[0]?.message?.content;
-  if (!content) throw new AiInvalidOutputError("The AI response was empty.");
+  if (!content) throw new AiEmptyOutputError("The AI response was empty.");
   let value: unknown;
-  try { value = JSON.parse(content); } catch { throw new AiInvalidOutputError("The AI response was not JSON."); }
+  try { value = JSON.parse(content); } catch { throw new AiInvalidJsonError("The AI response was not JSON."); }
   const parsed = ResumeSchema.safeParse(value);
   if (!parsed.success) throw new AiInvalidOutputError("The AI response did not match ResumeSchema.");
+
+  if (process.env.NODE_ENV === "development") {
+    console.info("[resume-structure] success", {
+      provider: "gemini",
+      model,
+      status: "success",
+      requestId: completion._request_id ?? "unavailable",
+      tokenUsage: completion.usage
+        ? {
+            prompt: completion.usage.prompt_tokens,
+            completion: completion.usage.completion_tokens,
+            total: completion.usage.total_tokens,
+          }
+        : "unavailable",
+    });
+  }
+
   return normalizeResumeData(parsed.data);
 }

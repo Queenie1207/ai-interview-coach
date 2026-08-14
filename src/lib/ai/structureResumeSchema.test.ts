@@ -18,8 +18,8 @@ const requiredTopLevelFields = [
 ];
 
 describe("resume structured output configuration", () => {
-  it("uses a 4096 completion-token limit", () => {
-    expect(RESUME_STRUCTURE_MAX_COMPLETION_TOKENS).toBe(4096);
+  it("uses an 8192 completion-token limit", () => {
+    expect(RESUME_STRUCTURE_MAX_COMPLETION_TOKENS).toBe(8192);
   });
 
   it("uses the model's lowest supported reasoning effort", () => {

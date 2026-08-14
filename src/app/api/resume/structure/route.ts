@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { AiNotConfiguredError } from "@/lib/ai/groqClient";
-import { AiInvalidOutputError, AiUpstreamError, structureResume } from "@/lib/ai/structureResume";
+import { AiNotConfiguredError } from "@/lib/ai/geminiClient";
+import {
+  AiAuthenticationError,
+  AiEmptyOutputError,
+  AiInvalidJsonError,
+  AiInvalidOutputError,
+  AiRateLimitedError,
+  AiUpstreamError,
+  structureResume,
+} from "@/lib/ai/structureResume";
 import type { ResumeStructureErrorCode, ResumeStructureResponse } from "@/types/resume";
 import { MAX_RESUME_TEXT_LENGTH } from "@/lib/resume/resumeStructureValidation";
 
@@ -10,7 +18,7 @@ function failure(code: ResumeStructureErrorCode, message: string, status: number
 }
 
 function safeLog(code: ResumeStructureErrorCode, stage: string, status: number) {
-  console.error("[resume-structure] failure", { code, stage, status, model: process.env.GROQ_MODEL?.trim() || "not-configured" });
+  console.error("[resume-structure] failure", { code, provider: "gemini", stage, status, model: process.env.GEMINI_MODEL?.trim() || "gemini-3.1-flash-lite" });
 }
 
 export async function POST(request: Request) {
@@ -31,7 +39,11 @@ export async function POST(request: Request) {
     return NextResponse.json<ResumeStructureResponse>({ success: true, data });
   } catch (error) {
     if (error instanceof AiNotConfiguredError) { safeLog("AI_NOT_CONFIGURED", "configuration", 503); return failure("AI_NOT_CONFIGURED", "Resume structuring is not configured on the server.", 503); }
+    if (error instanceof AiAuthenticationError) { safeLog("AI_AUTHENTICATION_ERROR", "authentication", 502); return failure("AI_AUTHENTICATION_ERROR", "The resume structuring service could not authenticate.", 502); }
+    if (error instanceof AiRateLimitedError) { safeLog("AI_RATE_LIMITED", "rate-limit", 429); return failure("AI_RATE_LIMITED", "The resume structuring service is busy. Please try again later.", 429); }
     if (error instanceof AiUpstreamError) { safeLog("AI_UPSTREAM_ERROR", "upstream", 502); return failure("AI_UPSTREAM_ERROR", "The resume structuring service is temporarily unavailable. Please try again.", 502); }
+    if (error instanceof AiEmptyOutputError) { safeLog("AI_EMPTY_OUTPUT", "response-extraction", 502); return failure("AI_EMPTY_OUTPUT", "The resume structuring service returned no output. Please try again.", 502); }
+    if (error instanceof AiInvalidJsonError) { safeLog("AI_INVALID_JSON", "json-parsing", 502); return failure("AI_INVALID_JSON", "The resume structuring service returned invalid data. Please try again.", 502); }
     if (error instanceof AiInvalidOutputError) { safeLog("AI_INVALID_OUTPUT", "validation", 502); return failure("AI_INVALID_OUTPUT", "The resume could not be structured reliably. Please try again.", 502); }
     safeLog("INTERNAL_ERROR", "internal", 500);
     return failure("INTERNAL_ERROR", "An unexpected error occurred. Please try again.", 500);

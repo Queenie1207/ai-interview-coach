@@ -1,15 +1,18 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import {
+  AiNotConfiguredError,
+  getGeminiConfiguration,
+} from "@/lib/ai/geminiClient";
 
 export const runtime = "nodejs";
-
-const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
 type ConnectionTestSuccess = {
   success: true;
   data: {
     connected: true;
-    message: "Groq connection successful";
+    provider: "gemini";
+    model: string;
   };
 };
 
@@ -17,7 +20,11 @@ type ConnectionTestError = {
   success: false;
   connected: false;
   error: {
-    code: "AI_NOT_CONFIGURED" | "AI_UPSTREAM_ERROR";
+    code:
+      | "AI_NOT_CONFIGURED"
+      | "AI_AUTHENTICATION_ERROR"
+      | "AI_RATE_LIMITED"
+      | "AI_UPSTREAM_ERROR";
     message: string;
   };
 };
@@ -40,7 +47,8 @@ function errorResponse(
 type FailureStage = "request" | "response extraction" | "validation" | "serialization";
 
 function logSafeFailure(stage: FailureStage, summary: string, error?: unknown) {
-  console.error("[groq-connection-test] failure", {
+  console.error("[gemini-connection-test] failure", {
+    provider: "gemini",
     stage,
     errorType: error instanceof Error ? error.name : "UnknownError",
     summary,
@@ -48,21 +56,20 @@ function logSafeFailure(stage: FailureStage, summary: string, error?: unknown) {
 }
 
 export async function POST() {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
-  const model = process.env.GROQ_MODEL?.trim();
-
-  if (!apiKey || !model) {
+  let configuration;
+  try {
+    configuration = getGeminiConfiguration();
+  } catch (error) {
+    if (!(error instanceof AiNotConfiguredError)) {
+      throw error;
+    }
     return errorResponse(
       "AI_NOT_CONFIGURED",
-      "Groq connection is not configured on the server.",
+      "Gemini connection is not configured on the server.",
       503,
     );
   }
-
-  const client = new OpenAI({
-    apiKey,
-    baseURL: GROQ_BASE_URL,
-  });
+  const { client, model } = configuration;
 
   let stage: FailureStage = "request";
 
@@ -72,7 +79,7 @@ export async function POST() {
       messages: [
         {
           role: "user",
-          content: "Reply with only this exact text: GROQ_CONNECTION_OK",
+          content: "Reply with only this exact text: GEMINI_CONNECTION_OK",
         },
       ],
       temperature: 0,
@@ -86,7 +93,7 @@ export async function POST() {
       logSafeFailure(stage, "The upstream response did not contain non-empty text.");
       return errorResponse(
         "AI_UPSTREAM_ERROR",
-        "Groq connection test failed. Please try again later.",
+        "Gemini connection test failed. Please try again later.",
         502,
       );
     }
@@ -96,14 +103,31 @@ export async function POST() {
       success: true,
       data: {
         connected: true,
-        message: "Groq connection successful",
+        provider: "gemini",
+        model,
       },
     });
   } catch (error) {
-    logSafeFailure(stage, "The Groq connection test could not complete.", error);
+    if (error instanceof OpenAI.AuthenticationError) {
+      logSafeFailure(stage, "Gemini authentication failed.", error);
+      return errorResponse(
+        "AI_AUTHENTICATION_ERROR",
+        "Gemini connection test could not authenticate.",
+        502,
+      );
+    }
+    if (error instanceof OpenAI.RateLimitError) {
+      logSafeFailure(stage, "Gemini rate limit was reached.", error);
+      return errorResponse(
+        "AI_RATE_LIMITED",
+        "Gemini connection test is rate limited. Please try again later.",
+        429,
+      );
+    }
+    logSafeFailure(stage, "The Gemini connection test could not complete.", error);
     return errorResponse(
       "AI_UPSTREAM_ERROR",
-      "Groq connection test failed. Please try again later.",
+      "Gemini connection test failed. Please try again later.",
       502,
     );
   }

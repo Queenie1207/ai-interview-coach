@@ -27,15 +27,15 @@ Phase 2A uses `pdf-parse` for server-side PDF text extraction. It is a maintaine
 
 ## Phase 2B
 
-Phase 2B sends Phase 2A's extracted text to `POST /api/resume/structure`. On the server, fixed extraction instructions are a system message and the resume text is a separate user message. Groq Chat Completions produces strict JSON Schema output, then Zod runtime-validates it as `ResumeData`.
+Phase 2B sends Phase 2A's extracted text to `POST /api/resume/structure`. On the server, fixed extraction instructions are a system message and the resume text is a separate user message. Gemini Chat Completions through its OpenAI-compatible API produces strict JSON Schema output, then Zod runtime-validates it as `ResumeData`.
 
-The schema includes profile, skills, languages, experience, education, projects, activities, certifications, and additional sections. The prompt prohibits invented facts, wholesale translation, scoring, JD matching, and interview questions. Groq is server-only; resume text is neither logged nor persisted. JD matching, Agents, RAG, databases, OCR, and automatic retry remain out of scope. Free API plans have provider rate and token limits.
+The schema includes profile, skills, languages, experience, education, projects, activities, certifications, and additional sections. The prompt prohibits invented facts, wholesale translation, scoring, JD matching, and interview questions. Gemini is server-only; resume text is neither logged nor persisted. JD matching, Agents, RAG, databases, OCR, and automatic retry remain out of scope. Free API plans have provider rate and token limits.
 
 Copy `.env.example` to `.env.local` and supply your own server-side key:
 
 ```text
-GROQ_API_KEY=
-GROQ_MODEL=openai/gpt-oss-120b
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
 The API accepts `application/json` containing `{ "extractedText": "..." }`. Success is `{ "success": true, "data": { ... } }`; failure is `{ "success": false, "error": { "code": "...", "message": "..." } }`. Validation failures use 400/413/415/422, missing configuration uses 503, and safe upstream or invalid-output failures use 502.
@@ -71,4 +71,4 @@ npm test
 npm run dev
 ```
 
-With `.env.local` configured, upload a non-sensitive text PDF, enter at least 50 JD characters, and submit. The PDF remains in memory; structured cards appear after both APIs succeed. The JD is not sent to Groq.
+With `.env.local` configured, upload a non-sensitive text PDF, enter at least 50 JD characters, and submit. The PDF remains in memory; structured cards appear after both APIs succeed. The JD is not sent to Gemini.

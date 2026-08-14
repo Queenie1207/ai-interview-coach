@@ -10,7 +10,7 @@ Phase 2A adds real PDF upload and text extraction. The selected PDF is sent to a
 
 ## Phase 2B scope
 
-Phase 2B converts extracted text to typed resume data. The browser calls the existing parser, then posts only its returned text to `POST /api/resume/structure`. Groq is called only by the server. A fixed prompt controls extraction, strict JSON Schema constrains Chat Completions output, and Zod independently validates it. `ResumeData` is inferred from `ResumeSchema`.
+Phase 2B converts extracted text to typed resume data. The browser calls the existing parser, then posts only its returned text to `POST /api/resume/structure`. Gemini is called only by the server through its OpenAI-compatible API. A fixed prompt controls extraction, strict JSON Schema constrains Chat Completions output, and Zod independently validates it. `ResumeData` is inferred from `ResumeSchema`.
 
 ## Home page
 
@@ -33,11 +33,11 @@ The client page owns form and result state. Valid submission clears old results,
 
 ## Phase 2B data flow and API
 
-Browser -> `POST /api/resume/parse` -> extracted text -> `POST /api/resume/structure` -> Groq Chat Completions strict JSON Schema -> Zod `ResumeSchema` -> `ResumeData` -> cards.
+Browser -> `POST /api/resume/parse` -> extracted text -> `POST /api/resume/structure` -> Gemini Chat Completions strict JSON Schema -> Zod `ResumeSchema` -> `ResumeData` -> cards.
 
-The structure route requires `application/json` with a non-empty string `extractedText`, limited to 100,000 characters. It returns the shared success/data or success/error envelope. Codes are `INVALID_CONTENT_TYPE`, `INVALID_REQUEST`, `EMPTY_RESUME_TEXT`, `RESUME_TEXT_TOO_LARGE`, `AI_NOT_CONFIGURED`, `AI_UPSTREAM_ERROR`, `AI_INVALID_OUTPUT`, and `INTERNAL_ERROR`.
+The structure route requires `application/json` with a non-empty string `extractedText`, limited to 100,000 characters. It returns the shared success/data or success/error envelope. AI failure codes are `AI_NOT_CONFIGURED`, `AI_AUTHENTICATION_ERROR`, `AI_RATE_LIMITED`, `AI_UPSTREAM_ERROR`, `AI_EMPTY_OUTPUT`, `AI_INVALID_JSON`, and `AI_INVALID_OUTPUT`; request validation and unexpected internal errors keep their existing codes.
 
-`GROQ_API_KEY` and centrally read `GROQ_MODEL` are server variables. The resume is a user message separate from the system prompt and is never logged or persisted. Rate and token limits are provider-dependent.
+`GEMINI_API_KEY` and centrally read `GEMINI_MODEL` are server variables; the model defaults to `gemini-3.1-flash-lite`. The resume is a user message separate from the system prompt and is never logged or persisted. Rate and token limits are provider-dependent.
 
 ## Phase 2A data flow
 
