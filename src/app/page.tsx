@@ -9,8 +9,7 @@ import { LoadingAnalysis } from "@/components/LoadingAnalysis";
 import { ResumeParseResult } from "@/components/ResumeParseResult";
 import { ResumeUploader } from "@/components/ResumeUploader";
 import { StructuredResumeResult } from "@/components/StructuredResumeResult";
-import { mockAnalysisResult } from "@/data/mockAnalysis";
-import type { AnalysisResult, AnalysisStatus } from "@/types/analysis";
+import type { AnalysisStatus, InterviewAnalysis, InterviewAnalysisResponse } from "@/types/analysis";
 import type { ParsedResume, ResumeParseResponse } from "@/types/resumeParse";
 import type { ResumeData, ResumeStructureResponse } from "@/types/resume";
 import { validateResumeFile } from "@/utils/fileValidation";
@@ -37,11 +36,12 @@ export default function Home() {
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<AnalysisStatus>("idle");
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<InterviewAnalysis | null>(null);
   const [parsedResume, setParsedResume] = useState<ParsedResume | null>(null);
   const [resumeParseError, setResumeParseError] = useState<string | null>(null);
   const [structuredResume, setStructuredResume] = useState<ResumeData | null>(null);
   const [structureError, setStructureError] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState("Parsing resume PDF...");
 
   const isLoading = status === "loading";
@@ -60,6 +60,7 @@ export default function Home() {
     setAnalysisResult(null);
     setStructuredResume(null);
     setStructureError(null);
+    setAnalysisError(null);
     setStatus("idle");
     setErrors((currentErrors) => ({ ...currentErrors, resume: undefined }));
   }
@@ -71,6 +72,7 @@ export default function Home() {
     setAnalysisResult(null);
     setStructuredResume(null);
     setStructureError(null);
+    setAnalysisError(null);
     setStatus("idle");
     setErrors((currentErrors) => ({ ...currentErrors, resume: undefined }));
   }
@@ -115,57 +117,72 @@ export default function Home() {
     }
 
     setAnalysisResult(null);
-    setParsedResume(null);
+    setAnalysisError(null);
     setResumeParseError(null);
-    setStructuredResume(null);
     setStructureError(null);
-    setLoadingMessage("Parsing resume PDF...");
     setStatus("loading");
 
-    let extractedText: string;
+    let resumeForAnalysis = structuredResume;
 
-    try {
-      const formData = new FormData();
-      formData.append("resume", resumeFile);
+    if (!resumeForAnalysis) {
+      let extractedText: string;
+      try {
+        setParsedResume(null);
+        setLoadingMessage("Reading resume PDF...");
+        const formData = new FormData();
+        formData.append("resume", resumeFile);
 
-      const response = await fetch("/api/resume/parse", {
-        method: "POST",
-        body: formData,
-      });
-      const responseBody = (await response.json()) as ResumeParseResponse;
+        const response = await fetch("/api/resume/parse", {
+          method: "POST",
+          body: formData,
+        });
+        const responseBody = (await response.json()) as ResumeParseResponse;
 
-      if (!responseBody.success) {
-        setResumeParseError(responseBody.error.message);
+        if (!responseBody.success) {
+          setResumeParseError(responseBody.error.message);
+          setStatus("idle");
+          return;
+        }
+
+        setParsedResume(responseBody.data);
+        extractedText = responseBody.data.text;
+      } catch {
+        setResumeParseError("We could not parse this resume. Please try again.");
         setStatus("idle");
         return;
       }
 
-      setParsedResume(responseBody.data);
-      extractedText = responseBody.data.text;
-    } catch {
-      setResumeParseError("We could not parse this resume. Please try again.");
-      setStatus("idle");
-      return;
+      try {
+        setLoadingMessage("Structuring resume with AI...");
+        const structureResponse = await fetch("/api/resume/structure", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ extractedText }),
+        });
+        const structureBody = (await structureResponse.json()) as ResumeStructureResponse;
+        if (!structureBody.success) {
+          setStructureError(structureBody.error.message);
+          setStatus("idle");
+          return;
+        }
+        setStructuredResume(structureBody.data);
+        resumeForAnalysis = structureBody.data;
+      } catch {
+        setStructureError("We could not complete resume structuring. Please try again.");
+        setStatus("idle");
+        return;
+      }
     }
 
     try {
-      setLoadingMessage("Structuring resume with AI...");
-      const structureResponse = await fetch("/api/resume/structure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extractedText }),
-      });
-      const structureBody = (await structureResponse.json()) as ResumeStructureResponse;
-      if (!structureBody.success) {
-        setStructureError(structureBody.error.message);
-        setStatus("idle");
-        return;
-      }
-      setStructuredResume(structureBody.data);
-      setAnalysisResult(mockAnalysisResult);
+      setLoadingMessage("Comparing resume with job requirements...");
+      const response = await fetch("/api/interview/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume: resumeForAnalysis, ...jobInputs, jobDescription: jobInputs.jobDescription.trim() }) });
+      const body = (await response.json()) as InterviewAnalysisResponse;
+      if (!body.success) { setAnalysisError(body.error.message); setStatus("idle"); return; }
+      setAnalysisResult(body.data);
       setStatus("success");
     } catch {
-      setStructureError("We could not complete resume structuring. Please try again.");
+      setAnalysisError("We could not complete the interview analysis. Please try again.");
       setStatus("idle");
     }
   }
@@ -201,6 +218,7 @@ export default function Home() {
         {isLoading ? <LoadingAnalysis message={loadingMessage} /> : null}
         <ResumeParseResult parsedResume={parsedResume} error={resumeParseError} />
         <StructuredResumeResult resume={structuredResume} error={structureError} />
+        {analysisError ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">{analysisError}</div> : null}
         {status === "success" && analysisResult ? (
           <AnalysisResultPanel result={analysisResult} />
         ) : null}

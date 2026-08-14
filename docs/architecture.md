@@ -12,6 +12,10 @@ Phase 2A adds real PDF upload and text extraction. The selected PDF is sent to a
 
 Phase 2B converts extracted text to typed resume data. The browser calls the existing parser, then posts only its returned text to `POST /api/resume/structure`. Gemini is called only by the server through its OpenAI-compatible API. A fixed prompt controls extraction, strict JSON Schema constrains Chat Completions output, and Zod independently validates it. `ResumeData` is inferred from `ResumeSchema`.
 
+## Phase 3A scope
+
+Phase 3A adds evidence-based matching through `POST /api/interview/analyze`. It accepts only validated `ResumeData`, a Job Description of at least 50 trimmed characters, and optional company and position names. Gemini strict structured output is independently checked with `InterviewAnalysisSchema`. No PDF text is sent to this endpoint.
+
 ## Home page
 
 The page contains a header, resume uploader, job-description form, analysis action, loading state, and mock-result section.
@@ -25,11 +29,15 @@ The page contains a header, resume uploader, job-description form, analysis acti
 - `LoadingAnalysis` presents in-progress feedback.
 - `ResumeParseResult` displays the parsed resume metadata and collapsible text preview.
 - `StructuredResumeResult` displays non-empty structured sections as responsive cards.
-- `AnalysisResultPanel` renders the analysis cards.
+- `AnalysisResultPanel` renders the real analysis, including evidence.
 
 ## State flow
 
-The client page owns form and result state. Valid submission clears old results, calls the parser, and only on success calls the structure route. Inputs stay disabled through both requests. Parse failure stops Phase 2B; structure failure clears old structured data and allows retry. The Phase 1 analysis is visibly labeled fixed mock data.
+The client page owns form and result state. On the first submission for a PDF it calls parse, structure, then analyze. Inputs and file actions stay disabled throughout. After structuring succeeds, analysis failures preserve `ResumeData`; retrying or changing only job inputs calls only analyze. Replacing or removing the PDF clears parsed text, structured data, and analysis.
+
+## Phase 3A data flow and API
+
+Browser -> validated `ResumeData` + Job Description -> `POST /api/interview/analyze` -> Gemini strict JSON Schema -> Zod `InterviewAnalysisSchema` -> evidence-based result.
 
 ## Phase 2B data flow and API
 

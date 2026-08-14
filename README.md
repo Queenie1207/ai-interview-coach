@@ -1,6 +1,6 @@
 # AI Interview Coach
 
-AI Interview Coach is an interview-prep prototype for resume and job-description matching. Users can choose a resume PDF, paste a job description, parse the resume text on the Next.js server, and review mock interview focus areas.
+AI Interview Coach is an interview-prep prototype for resume and job-description matching. Users can choose a resume PDF, paste a job description, and receive an evidence-based Gemini analysis.
 
 ## Phase-one features
 
@@ -71,4 +71,4 @@ npm test
 npm run dev
 ```
 
-With `.env.local` configured, upload a non-sensitive text PDF, enter at least 50 JD characters, and submit. The PDF remains in memory; structured cards appear after both APIs succeed. The JD is not sent to Gemini.
+With `.env.local` configured, upload a non-sensitive text PDF, enter at least 50 JD characters, and submit. The PDF remains in memory. Phase 3A sends only validated `ResumeData` and the Job Description to `POST /api/interview/analyze`; it never resends PDF text. Changing only job inputs reuses the current in-memory `ResumeData`.
