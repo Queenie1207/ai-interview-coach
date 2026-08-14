@@ -7,6 +7,9 @@ import { normalizeResumeData } from "@/lib/resume/normalizeResumeData";
 export class AiUpstreamError extends Error {}
 export class AiInvalidOutputError extends Error {}
 
+export const RESUME_STRUCTURE_MAX_COMPLETION_TOKENS = 4096;
+export const RESUME_STRUCTURE_REASONING_EFFORT = "low" as const;
+
 export const resumeJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -38,6 +41,8 @@ export async function structureResume(extractedText: string): Promise<ResumeData
     completion = await client.chat.completions.create({
       model,
       temperature: 0,
+      max_completion_tokens: RESUME_STRUCTURE_MAX_COMPLETION_TOKENS,
+      reasoning_effort: RESUME_STRUCTURE_REASONING_EFFORT,
       messages: [
         { role: "system", content: RESUME_STRUCTURE_SYSTEM_PROMPT },
         { role: "user", content: extractedText },
