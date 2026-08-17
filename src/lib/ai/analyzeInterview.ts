@@ -1,7 +1,8 @@
 import "server-only";
 import OpenAI from "openai";
 import { getGeminiConfiguration } from "@/lib/ai/geminiClient";
-import { INTERVIEW_ANALYSIS_SYSTEM_PROMPT } from "@/lib/prompts/interviewAnalysisPrompt";
+import { buildInterviewAnalysisSystemPrompt } from "@/lib/prompts/interviewAnalysisPrompt";
+import type { SupportedLocale } from "@/lib/i18n/locales";
 import { InterviewAnalysisSchema, type InterviewAnalysis } from "@/lib/schemas/interviewAnalysisSchema";
 import type { ResumeData } from "@/lib/schemas/resumeSchema";
 
@@ -25,7 +26,7 @@ export const interviewAnalysisJsonSchema = object({
   interviewFocus: array(object({ topic: string(), reason: string(), relatedRequirement: string(), resumeEvidence: array(string()) })),
 });
 
-type AnalysisInput = { resume: ResumeData; jobDescription: string; companyName?: string; positionName?: string };
+type AnalysisInput = { resume: ResumeData; jobDescription: string; companyName?: string; positionName?: string; outputLanguage: SupportedLocale };
 
 export async function analyzeInterview(input: AnalysisInput): Promise<InterviewAnalysis> {
   const { client, model } = getGeminiConfiguration();
@@ -34,7 +35,7 @@ export async function analyzeInterview(input: AnalysisInput): Promise<InterviewA
     completion = await client.chat.completions.create({
       model, temperature: 0, max_completion_tokens: 8192, reasoning_effort: "low",
       messages: [
-        { role: "system", content: INTERVIEW_ANALYSIS_SYSTEM_PROMPT },
+        { role: "system", content: buildInterviewAnalysisSystemPrompt(input.outputLanguage) },
         { role: "user", content: JSON.stringify(input) },
       ],
       response_format: { type: "json_schema", json_schema: { name: "interview_analysis", strict: true, schema: interviewAnalysisJsonSchema } },

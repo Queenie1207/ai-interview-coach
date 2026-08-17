@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai/analyzeInterview";
 import { ResumeSchema } from "@/lib/schemas/resumeSchema";
 import type { AnalysisErrorCode, InterviewAnalysisResponse } from "@/types/analysis";
+import { isSupportedLocale } from "@/lib/i18n/locales";
 
 export const runtime = "nodejs";
 const MIN_JD_LENGTH = 50;
@@ -31,9 +32,10 @@ export async function POST(request: Request) {
   if (jobDescription.length < MIN_JD_LENGTH) return failure("INVALID_JOB_DESCRIPTION", `Job Description must be at least ${MIN_JD_LENGTH} characters.`, 422);
   if (value.companyName !== undefined && typeof value.companyName !== "string") return failure("INVALID_REQUEST", "companyName must be a string.", 400);
   if (value.positionName !== undefined && typeof value.positionName !== "string") return failure("INVALID_REQUEST", "positionName must be a string.", 400);
+  if (!isSupportedLocale(value.outputLanguage)) return failure("INVALID_OUTPUT_LANGUAGE", "The requested output language is not supported.", 400);
 
   try {
-    const data = await analyzeInterview({ resume: parsedResume.data, jobDescription, companyName: typeof value.companyName === "string" ? value.companyName.trim() : undefined, positionName: typeof value.positionName === "string" ? value.positionName.trim() : undefined });
+    const data = await analyzeInterview({ resume: parsedResume.data, jobDescription, companyName: typeof value.companyName === "string" ? value.companyName.trim() : undefined, positionName: typeof value.positionName === "string" ? value.positionName.trim() : undefined, outputLanguage: value.outputLanguage });
     return NextResponse.json<InterviewAnalysisResponse>({ success: true, data });
   } catch (error) {
     const mappings: Array<[new (...args: never[]) => Error, AnalysisErrorCode, string, number]> = [

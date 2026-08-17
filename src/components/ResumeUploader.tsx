@@ -2,8 +2,11 @@
 
 import { useRef, useState } from "react";
 import { formatFileSize } from "@/utils/fileValidation";
+import type { SupportedLocale } from "@/lib/i18n/locales";
+import { translate } from "@/lib/i18n/messages";
 
 type ResumeUploaderProps = {
+  locale: SupportedLocale;
   resumeFile: File | null;
   error?: string;
   disabled: boolean;
@@ -12,6 +15,7 @@ type ResumeUploaderProps = {
 };
 
 export function ResumeUploader({
+  locale,
   resumeFile,
   error,
   disabled,
@@ -53,8 +57,8 @@ export function ResumeUploader({
     <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-950">Resume PDF</h2>
-          <p className="mt-1 text-sm text-zinc-600">Accepted format: PDF, max 10 MB.</p>
+          <h2 className="text-lg font-semibold text-zinc-950">{translate(locale, "resumePdf")}</h2>
+          <p className="mt-1 text-sm text-zinc-600">{translate(locale, "acceptedFormat")}</p>
         </div>
         {resumeFile ? (
           <button
@@ -63,7 +67,7 @@ export function ResumeUploader({
             disabled={disabled}
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Remove
+            {translate(locale, "remove")}
           </button>
         ) : null}
       </div>
@@ -107,7 +111,7 @@ export function ResumeUploader({
               disabled={disabled}
               className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-500 sm:w-auto"
             >
-              Change
+              {translate(locale, "change")}
             </button>
           </div>
         ) : (
@@ -117,9 +121,9 @@ export function ResumeUploader({
             disabled={disabled}
             className="flex w-full flex-col items-center justify-center rounded-md px-4 py-6 text-center transition focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:cursor-not-allowed"
           >
-            <span className="text-base font-semibold text-zinc-950">Choose or drop PDF</span>
+            <span className="text-base font-semibold text-zinc-950">{translate(locale, "choosePdf")}</span>
             <span className="mt-2 text-sm text-zinc-600">
-              The file stays in browser state for this phase.
+              {translate(locale, "browserState")}
             </span>
           </button>
         )}

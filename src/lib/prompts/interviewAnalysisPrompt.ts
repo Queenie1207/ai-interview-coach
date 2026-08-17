@@ -1,3 +1,5 @@
+import type { SupportedLocale } from "@/lib/i18n/locales";
+
 export const INTERVIEW_ANALYSIS_SYSTEM_PROMPT = `You are a resume-to-job-requirements analyzer, not a resume editor. Analyze only the supplied ResumeData and Job Description. Do not use external knowledge to add candidate experience.
 
 Evidence and accuracy:
@@ -23,3 +25,21 @@ Output:
 - Do not summarize, modify, optimize, or restructure ResumeData.
 - Output only fields in InterviewAnalysisSchema and conform strictly to it.
 - Prefer 1-5 strengths, 0-5 gaps, and 1-5 interviewFocus items, but never invent content to meet a count.`;
+
+const outputInstructions: Record<SupportedLocale, string> = {
+  "zh-TW": "Write all generated narrative fields in Traditional Chinese (繁體中文). Do not use Simplified Chinese.",
+  "zh-CN": "Write all generated narrative fields in Simplified Chinese (简体中文). Do not use Traditional Chinese.",
+  en: "Write all generated narrative fields in English.",
+};
+
+export function buildInterviewAnalysisSystemPrompt(outputLanguage: SupportedLocale): string {
+  return `${INTERVIEW_ANALYSIS_SYSTEM_PROMPT}
+
+Output language:
+- ${outputInstructions[outputLanguage]}
+- Generated narrative fields are: summary; strengths[].title and explanation; gaps[].requirement, explanation, and recommendation; interviewFocus[].topic, reason, and relatedRequirement.
+- Evidence fields must remain faithful excerpts in the original input language. Never translate or rewrite strengths[].evidence.resumeEvidence, strengths[].evidence.jdEvidence, gaps[].resumeEvidence, gaps[].jdEvidence, or interviewFocus[].resumeEvidence.
+- Preserve technical terms, company names, frameworks, programming languages, and product names in their original form (for example Swift, iOS, React, Gemini, WebSocket, VLA, and MVVM).
+- Do not add facts while translating generated narrative.
+- The selected language must not affect matchScore, matchLevel, classifications, evidence, scoring rules, or schema structure.`;
+}
