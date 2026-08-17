@@ -40,6 +40,10 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 
 The API accepts `application/json` containing `{ "extractedText": "..." }`. Success is `{ "success": true, "data": { ... } }`; failure is `{ "success": false, "error": { "code": "...", "message": "..." } }`. Validation failures use 400/413/415/422, missing configuration uses 503, and safe upstream or invalid-output failures use 502.
 
+## Phase 3B
+
+The home page uses four in-memory steps on the same URL: resume and job inputs, structured resume, match analysis, and interview preparation. `POST /api/interview/prepare` accepts validated `ResumeData`, Job Description, `InterviewAnalysis`, and an output language. It calls Gemini once with strict structured output, then independently validates the result with `InterviewPreparationSchema`. No PDF or extracted resume text is resent, and resume-sensitive state is never saved to local storage.
+
 ## Install
 
 ```bash

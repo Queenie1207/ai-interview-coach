@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { AnalysisResultPanel } from "@/components/AnalysisResultPanel";
 import { AnalyzeButton } from "@/components/AnalyzeButton";
 import { Header } from "@/components/Header";
@@ -9,12 +9,16 @@ import { LoadingAnalysis } from "@/components/LoadingAnalysis";
 import { ResumeParseResult } from "@/components/ResumeParseResult";
 import { ResumeUploader } from "@/components/ResumeUploader";
 import { StructuredResumeResult } from "@/components/StructuredResumeResult";
+import { StepNavigation, type WorkflowStep } from "@/components/StepNavigation";
+import { InterviewPreparationPanel } from "@/components/InterviewPreparationPanel";
 import type { AnalysisStatus, InterviewAnalysis, InterviewAnalysisResponse } from "@/types/analysis";
 import type { ParsedResume, ResumeParseResponse } from "@/types/resumeParse";
 import type { ResumeData, ResumeStructureResponse } from "@/types/resume";
 import { validateResumeFile } from "@/utils/fileValidation";
 import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, resolveInitialLocale, type SupportedLocale } from "@/lib/i18n/locales";
 import { translate, type MessageKey } from "@/lib/i18n/messages";
+import type { InterviewPreparation, InterviewPreparationResponse } from "@/types/preparation";
+import { createRequestGuard, getStepAvailability, inputsAreDisabled, stepAfterAnalysisCompletes } from "@/lib/workflow/workflowState";
 
 type FormErrors = {
   resume?: string;
@@ -47,8 +51,17 @@ export default function Home() {
   const [loadingMessage, setLoadingMessage] = useState("Parsing resume PDF...");
   const [locale, setLocale] = useState<SupportedLocale>(DEFAULT_LOCALE);
   const [languageChangeNotice, setLanguageChangeNotice] = useState(false);
+  const [activeStep, setActiveStep] = useState<WorkflowStep>(1);
+  const [preparation, setPreparation] = useState<InterviewPreparation | null>(null);
+  const [preparationLoading, setPreparationLoading] = useState(false);
+  const [preparationError, setPreparationError] = useState<string | null>(null);
+  const [analysisAttempted, setAnalysisAttempted] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState<"idle" | "parsing" | "structuring" | "analyzing">("idle");
+  const analysisGuard = useRef(createRequestGuard());
+  const preparationGuard = useRef(createRequestGuard());
 
-  const isLoading = status === "loading";
+  const analysisLoading = status === "loading";
+  const inputDisabled = inputsAreDisabled({ analysisLoading, preparationLoading });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -61,17 +74,17 @@ export default function Home() {
     const keys: Record<string, MessageKey> = {
       FILE_REQUIRED: "resumeRequired", INVALID_FILE_TYPE: "invalidPdf", FILE_TOO_LARGE: "pdfTooLarge",
       AI_NOT_CONFIGURED: "aiNotConfigured", AI_AUTHENTICATION_ERROR: "aiAuthentication", AI_RATE_LIMITED: "aiRateLimited",
-      AI_UPSTREAM_ERROR: "aiUpstream", AI_EMPTY_OUTPUT: "aiInvalidOutput", AI_INVALID_JSON: "aiInvalidOutput", AI_INVALID_OUTPUT: "aiInvalidOutput",
+      AI_UPSTREAM_ERROR: "aiUpstream", AI_EMPTY_OUTPUT: "aiInvalidOutput", AI_INVALID_JSON: "aiInvalidOutput", AI_OUTPUT_TRUNCATED: "aiOutputTruncated", AI_INVALID_OUTPUT: "aiInvalidOutput",
     };
     return translate(locale, keys[code] ?? fallback);
   }
 
   function handleLocaleChange(nextLocale: SupportedLocale) {
-    if (isLoading || nextLocale === locale) return;
+    if (inputDisabled || nextLocale === locale) return;
     setLocale(nextLocale);
     localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
     setErrors({});
-    if (analysisResult) { setAnalysisResult(null); setStatus("idle"); setLanguageChangeNotice(true); }
+    if (analysisResult || preparation || analysisAttempted) { setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setAnalysisAttempted(false); setAnalysisStage("idle"); setStatus("idle"); setActiveStep(1); setLanguageChangeNotice(true); }
   }
 
   function handleResumeSelect(file: File) {
@@ -87,11 +100,16 @@ export default function Home() {
     setParsedResume(null);
     setResumeParseError(null);
     setAnalysisResult(null);
+    setPreparation(null);
+    setPreparationError(null);
     setStructuredResume(null);
     setStructureError(null);
     setAnalysisError(null);
     setLanguageChangeNotice(false);
     setStatus("idle");
+    setAnalysisAttempted(false);
+    setAnalysisStage("idle");
+    setActiveStep(1);
     setErrors((currentErrors) => ({ ...currentErrors, resume: undefined }));
   }
 
@@ -100,15 +118,29 @@ export default function Home() {
     setParsedResume(null);
     setResumeParseError(null);
     setAnalysisResult(null);
+    setPreparation(null);
+    setPreparationError(null);
     setStructuredResume(null);
     setStructureError(null);
     setAnalysisError(null);
     setStatus("idle");
+    setAnalysisAttempted(false);
+    setAnalysisStage("idle");
+    setActiveStep(1);
     setErrors((currentErrors) => ({ ...currentErrors, resume: undefined }));
   }
 
   function updateJobInput(field: keyof JobInputs, value: string) {
     setJobInputs((currentInputs) => ({ ...currentInputs, [field]: value }));
+    setAnalysisResult(null);
+    setPreparation(null);
+    setAnalysisError(null);
+    setPreparationError(null);
+    setLanguageChangeNotice(false);
+    setStatus("idle");
+    setAnalysisAttempted(false);
+    setAnalysisStage("idle");
+    setActiveStep(1);
 
     if (field === "jobDescription" && value.trim().length >= MIN_JOB_DESCRIPTION_LENGTH) {
       setErrors((currentErrors) => ({ ...currentErrors, jobDescription: undefined }));
@@ -145,19 +177,24 @@ export default function Home() {
     if (!resumeFile) {
       return;
     }
+    if (!analysisGuard.current.tryStart()) return;
 
     setAnalysisResult(null);
+    setPreparation(null);
+    setPreparationError(null);
     setAnalysisError(null);
     setResumeParseError(null);
     setStructureError(null);
     setStatus("loading");
 
-    let resumeForAnalysis = structuredResume;
+    try {
+      let resumeForAnalysis = structuredResume;
 
-    if (!resumeForAnalysis) {
+      if (!resumeForAnalysis) {
       let extractedText: string;
       try {
         setParsedResume(null);
+        setAnalysisStage("parsing");
         setLoadingMessage(translate(locale, "readingPdf"));
         const formData = new FormData();
         formData.append("resume", resumeFile);
@@ -170,7 +207,7 @@ export default function Home() {
 
         if (!responseBody.success) {
           setResumeParseError(localizedApiError(responseBody.error.code, "parseUnknown"));
-          setStatus("idle");
+          setStatus("idle"); setAnalysisStage("idle");
           return;
         }
 
@@ -178,12 +215,13 @@ export default function Home() {
         extractedText = responseBody.data.text;
       } catch {
         setResumeParseError(translate(locale, "parseUnknown"));
-        setStatus("idle");
+        setStatus("idle"); setAnalysisStage("idle");
         return;
       }
 
       try {
         setLoadingMessage(translate(locale, "structuringResume"));
+        setAnalysisStage("structuring");
         const structureResponse = await fetch("/api/resume/structure", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -192,42 +230,79 @@ export default function Home() {
         const structureBody = (await structureResponse.json()) as ResumeStructureResponse;
         if (!structureBody.success) {
           setStructureError(localizedApiError(structureBody.error.code, "structureUnknown"));
-          setStatus("idle");
+          setStatus("idle"); setAnalysisStage("idle");
           return;
         }
         setStructuredResume(structureBody.data);
         resumeForAnalysis = structureBody.data;
       } catch {
         setStructureError(translate(locale, "structureUnknown"));
-        setStatus("idle");
+        setStatus("idle"); setAnalysisStage("idle");
         return;
       }
-    }
+      }
 
-    try {
+      try {
+      setAnalysisAttempted(true);
+      setAnalysisStage("analyzing");
       setLoadingMessage(translate(locale, "comparingRequirements"));
       const response = await fetch("/api/interview/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume: resumeForAnalysis, ...jobInputs, jobDescription: jobInputs.jobDescription.trim(), outputLanguage: locale }) });
       const body = (await response.json()) as InterviewAnalysisResponse;
-      if (!body.success) { setAnalysisError(localizedApiError(body.error.code, "analysisUnknown")); setStatus("idle"); return; }
+      if (!body.success) { setAnalysisError(localizedApiError(body.error.code, "analysisUnknown")); setStatus("idle"); setAnalysisStage("idle"); return; }
       setAnalysisResult(body.data);
+      setActiveStep(stepAfterAnalysisCompletes);
       setStatus("success");
+      setAnalysisStage("idle");
     } catch {
       setAnalysisError(translate(locale, "analysisUnknown"));
       setStatus("idle");
+      setAnalysisStage("idle");
+    }
+    } finally {
+      analysisGuard.current.finish();
     }
   }
 
+  async function retryAnalysis() {
+    if (!structuredResume || !analysisGuard.current.tryStart()) return;
+    setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setAnalysisAttempted(true); setAnalysisStage("analyzing"); setLoadingMessage(translate(locale, "comparingRequirements")); setStatus("loading");
+    try {
+      const response = await fetch("/api/interview/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume: structuredResume, ...jobInputs, jobDescription: jobInputs.jobDescription.trim(), outputLanguage: locale }) });
+      const body = (await response.json()) as InterviewAnalysisResponse;
+      if (!body.success) { setAnalysisError(localizedApiError(body.error.code, "analysisUnknown")); return; }
+      setAnalysisResult(body.data);
+      setActiveStep(stepAfterAnalysisCompletes);
+    } catch { setAnalysisError(translate(locale, "analysisUnknown")); }
+    finally { setStatus("idle"); setAnalysisStage("idle"); analysisGuard.current.finish(); }
+  }
+
+  async function handlePrepare() {
+    if (!structuredResume || !analysisResult || !preparationGuard.current.tryStart()) return;
+    setPreparation(null); setPreparationError(null); setLoadingMessage(translate(locale, "generatingPreparation")); setPreparationLoading(true); setActiveStep(4);
+    try {
+      const response = await fetch("/api/interview/prepare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume: structuredResume, jobDescription: jobInputs.jobDescription.trim(), analysis: analysisResult, companyName: jobInputs.companyName, positionName: jobInputs.positionName, outputLanguage: locale }) });
+      const body = (await response.json()) as InterviewPreparationResponse;
+      if (!body.success) { setPreparationError(localizedApiError(body.error.code, "preparationUnknown")); return; }
+      setPreparation(body.data);
+    } catch { setPreparationError(translate(locale, "preparationUnknown")); }
+    finally { setPreparationLoading(false); preparationGuard.current.finish(); }
+  }
+
+  const enabled = getStepAvailability({ hasStructuredResume: Boolean(structuredResume), analysisStarted: analysisAttempted, hasAnalysis: Boolean(analysisResult) });
+  const completed: Record<WorkflowStep, boolean> = { 1: Boolean(structuredResume), 2: Boolean(structuredResume), 3: Boolean(analysisResult), 4: Boolean(preparation) };
+
   return (
     <div className="min-h-screen bg-zinc-100 text-zinc-950">
-      <Header locale={locale} disabled={isLoading} onLocaleChange={handleLocaleChange} />
+      <Header locale={locale} disabled={inputDisabled} onLocaleChange={handleLocaleChange} />
       <main className="mx-auto grid w-full max-w-6xl gap-6 px-5 py-6 sm:px-8 sm:py-8">
-        <form onSubmit={handleSubmit} noValidate className="grid gap-6">
+        <StepNavigation locale={locale} active={activeStep} enabled={enabled} completed={completed} onChange={setActiveStep} />
+        {activeStep === 1 ? <form onSubmit={handleSubmit} noValidate className="grid gap-6">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
             <ResumeUploader
               locale={locale}
               resumeFile={resumeFile}
               error={errors.resume}
-              disabled={isLoading}
+              disabled={inputDisabled}
               onFileSelect={handleResumeSelect}
               onRemove={handleResumeRemove}
             />
@@ -237,24 +312,26 @@ export default function Home() {
               positionName={jobInputs.positionName}
               jobDescription={jobInputs.jobDescription}
               jobDescriptionError={errors.jobDescription}
-              disabled={isLoading}
+              disabled={inputDisabled}
               onCompanyNameChange={(value) => updateJobInput("companyName", value)}
               onPositionNameChange={(value) => updateJobInput("positionName", value)}
               onJobDescriptionChange={(value) => updateJobInput("jobDescription", value)}
             />
           </div>
 
-          <AnalyzeButton disabled={isLoading} label={translate(locale, "startAnalysis")} />
-        </form>
+          <AnalyzeButton disabled={inputDisabled} label={translate(locale, "startAnalysis")} />
+        </form> : null}
 
-        {isLoading ? <LoadingAnalysis message={loadingMessage} /> : null}
-        <ResumeParseResult locale={locale} parsedResume={parsedResume} error={resumeParseError} />
-        <StructuredResumeResult locale={locale} resume={structuredResume} error={structureError} />
-        {languageChangeNotice ? <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm font-medium text-amber-900">{translate(locale, "analysisLanguageChanged")}</div> : null}
-        {analysisError ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">{analysisError}</div> : null}
-        {status === "success" && analysisResult ? (
+        {activeStep === 1 && analysisLoading ? <LoadingAnalysis message={loadingMessage} /> : null}
+        {activeStep === 1 && languageChangeNotice ? <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm font-medium text-amber-900">{translate(locale, "analysisLanguageChanged")}</div> : null}
+        {activeStep === 1 && (resumeParseError || structureError || analysisError) ? <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">{resumeParseError ?? structureError ?? analysisError}</div> : null}
+        {activeStep === 2 ? <><ResumeParseResult locale={locale} parsedResume={parsedResume} error={resumeParseError} /><StructuredResumeResult locale={locale} resume={structuredResume} error={structureError} /></> : null}
+        {activeStep === 3 && analysisStage === "analyzing" ? <LoadingAnalysis message={translate(locale, "comparingRequirements")} /> : null}
+        {activeStep === 3 && analysisError ? <div className="rounded-lg border border-red-200 bg-red-50 p-5"><p role="alert" className="text-sm font-medium text-red-800">{analysisError}</p><button type="button" disabled={inputDisabled} onClick={retryAnalysis} className="mt-4 rounded-md bg-teal-700 px-4 py-2 font-semibold text-white disabled:opacity-60">{translate(locale, "retryAnalysis")}</button></div> : null}
+        {activeStep === 3 && analysisResult ? (
           <AnalysisResultPanel locale={locale} result={analysisResult} />
         ) : null}
+        {activeStep === 4 && analysisResult ? <InterviewPreparationPanel locale={locale} preparation={preparation} loading={preparationLoading} error={preparationError} onGenerate={handlePrepare} /> : null}
       </main>
     </div>
   );

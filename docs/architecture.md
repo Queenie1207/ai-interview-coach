@@ -18,7 +18,7 @@ Phase 3A adds evidence-based matching through `POST /api/interview/analyze`. It 
 
 ## Home page
 
-The page contains a header, resume uploader, job-description form, analysis action, loading state, and mock-result section.
+The page uses four in-memory steps on one App Router URL and renders only the active step. Sensitive workflow data is not persisted.
 
 ## Component responsibilities
 
@@ -30,6 +30,13 @@ The page contains a header, resume uploader, job-description form, analysis acti
 - `ResumeParseResult` displays the parsed resume metadata and collapsible text preview.
 - `StructuredResumeResult` displays non-empty structured sections as responsive cards.
 - `AnalysisResultPanel` renders the real analysis, including evidence.
+- `StepNavigation` exposes accessible active, completed, and disabled states.
+- `InterviewPreparationPanel` renders preparation actions, questions, and review topics.
+- `InterviewQuestionCard` provides the native-button accordion interaction.
+
+## Phase 3B data flow and API
+
+Validated `ResumeData` + Job Description + `InterviewAnalysis` + output language -> `POST /api/interview/prepare` -> one Gemini strict JSON Schema call -> `InterviewPreparationSchema.safeParse` -> preparation UI. PDF and extracted text are never sent to Phase 3B.
 
 ## State flow
 

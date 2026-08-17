@@ -12,4 +12,12 @@ describe("locales", () => {
     expect(Object.keys(messages["zh-CN"]).sort()).toEqual(Object.keys(messages.en).sort());
     expect(Object.keys(messages["zh-TW"]).sort()).toEqual(Object.keys(messages.en).sort());
   });
+  it.each(["zh-TW", "zh-CN", "en"] as const)("has workflow loading, error, and retry text for %s", (locale) => {
+    expect(messages[locale].comparingRequirements).toBeTruthy();
+    expect(messages[locale].analysisUnknown).toBeTruthy();
+    expect(messages[locale].retryAnalysis).toBeTruthy();
+    expect(messages[locale].generatingPreparation).toBeTruthy();
+    expect(messages[locale].preparationUnknown).toBeTruthy();
+    expect(messages[locale].retryPreparation).toBeTruthy();
+  });
 });
