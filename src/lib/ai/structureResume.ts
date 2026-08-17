@@ -12,8 +12,43 @@ export class AiEmptyOutputError extends Error {}
 export class AiInvalidJsonError extends Error {}
 export class AiInvalidOutputError extends Error {}
 
-export const RESUME_STRUCTURE_MAX_COMPLETION_TOKENS = 8192;
 export const RESUME_STRUCTURE_REASONING_EFFORT = "low" as const;
+
+type InvalidJsonDiagnosticsInput = {
+  content: string;
+  finishReason: string | null | undefined;
+  requestId: string | null | undefined;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+};
+
+export type InvalidJsonDiagnostics = {
+  finishReason: string;
+  requestId: string;
+  outputCharacters: number;
+  beginsWithJsonObject: boolean;
+  endsWithJsonObject: boolean;
+  containsMarkdownCodeFence: boolean;
+  tokenUsage: { prompt?: number; completion?: number; total?: number };
+};
+
+export function createInvalidJsonDiagnostics(input: InvalidJsonDiagnosticsInput): InvalidJsonDiagnostics {
+  const trimmedContent = input.content.trim();
+  return {
+    finishReason: input.finishReason ?? "unavailable",
+    requestId: input.requestId ?? "unavailable",
+    outputCharacters: input.content.length,
+    beginsWithJsonObject: trimmedContent.startsWith("{"),
+    endsWithJsonObject: trimmedContent.endsWith("}"),
+    containsMarkdownCodeFence: trimmedContent.includes("```"),
+    tokenUsage: {
+      prompt: input.promptTokens,
+      completion: input.completionTokens,
+      total: input.totalTokens,
+    },
+  };
+}
 
 export const resumeJsonSchema = {
   type: "object",
@@ -46,7 +81,8 @@ export async function structureResume(extractedText: string): Promise<ResumeData
     completion = await client.chat.completions.create({
       model,
       temperature: 0,
-      max_completion_tokens: RESUME_STRUCTURE_MAX_COMPLETION_TOKENS,
+      // Let Gemini apply its provider/model output-token limit.
+      // max_completion_tokens: 8192,
       reasoning_effort: RESUME_STRUCTURE_REASONING_EFFORT,
       messages: [
         { role: "system", content: RESUME_STRUCTURE_SYSTEM_PROMPT },
@@ -70,7 +106,20 @@ export async function structureResume(extractedText: string): Promise<ResumeData
   const content = completion.choices[0]?.message?.content;
   if (!content) throw new AiEmptyOutputError("The AI response was empty.");
   let value: unknown;
-  try { value = JSON.parse(content); } catch { throw new AiInvalidJsonError("The AI response was not JSON."); }
+  try {
+    value = JSON.parse(content);
+  } catch {
+    const diagnostics = createInvalidJsonDiagnostics({
+      content,
+      finishReason: completion.choices[0]?.finish_reason,
+      requestId: completion._request_id,
+      promptTokens: completion.usage?.prompt_tokens,
+      completionTokens: completion.usage?.completion_tokens,
+      totalTokens: completion.usage?.total_tokens,
+    });
+    console.error("[resume-structure] invalid-json-diagnostics", JSON.stringify(diagnostics));
+    throw new AiInvalidJsonError("The AI response was not JSON.");
+  }
   const parsed = ResumeSchema.safeParse(value);
   if (!parsed.success) throw new AiInvalidOutputError("The AI response did not match ResumeSchema.");
 
