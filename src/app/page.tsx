@@ -14,6 +14,8 @@ import { InterviewPreparationPanel } from "@/components/InterviewPreparationPane
 import { InterviewPracticePanel } from "@/components/InterviewPracticePanel";
 import { mockAnswerEvaluations } from "@/data/mockAnswerEvaluations";
 import { validatePracticeAnswer } from "@/lib/practice/answerValidation";
+import { createPracticeEvaluationTimer } from "@/lib/practice/practiceEvaluationTimer";
+import { getPracticeLocaleChangeStrategy } from "@/lib/practice/practiceLocalePolicy";
 import type { AnalysisStatus, InterviewAnalysis, InterviewAnalysisResponse } from "@/types/analysis";
 import type { ParsedResume, ResumeParseResponse } from "@/types/resumeParse";
 import type { ResumeData, ResumeStructureResponse } from "@/types/resume";
@@ -72,6 +74,7 @@ export default function Home() {
   const practiceRequestId = useRef(0);
   const lastPracticedQuestion = useRef<InterviewPreparation["questions"][number] | null>(null);
   const practiceLocale = useRef<SupportedLocale>(DEFAULT_LOCALE);
+  const practiceTimer = useRef(createPracticeEvaluationTimer());
   const analysisGuard = useRef(createRequestGuard());
   const preparationGuard = useRef(createRequestGuard());
   const moreQuestionsGuard = useRef(createRequestGuard());
@@ -80,10 +83,16 @@ export default function Home() {
   const inputDisabled = inputsAreDisabled({ analysisLoading, preparationLoading }) || moreQuestionsLoading;
 
   useEffect(() => {
+    const evaluationTimer = practiceTimer.current;
     const timer = window.setTimeout(() => {
-      setLocale(resolveInitialLocale(localStorage.getItem(LOCALE_STORAGE_KEY), navigator.language));
+      const initialLocale = resolveInitialLocale(localStorage.getItem(LOCALE_STORAGE_KEY), navigator.language);
+      practiceLocale.current = initialLocale;
+      setLocale(initialLocale);
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      evaluationTimer.cancel();
+    };
   }, []);
 
   function localizedApiError(code: string, fallback: MessageKey): string {
@@ -101,17 +110,24 @@ export default function Home() {
     practiceLocale.current = nextLocale;
     localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
     setErrors({});
-    if (selectedPracticeQuestion) {
+    const localeStrategy = getPracticeLocaleChangeStrategy({ hasActivePractice: Boolean(selectedPracticeQuestion), hasAnalysisState: Boolean(analysisResult || preparation || analysisAttempted) });
+    if (localeStrategy === "preserve-practice") {
       if (practiceEvaluation) setPracticeEvaluation(mockAnswerEvaluations[nextLocale]);
       return;
     }
-    if (analysisResult || preparation || analysisAttempted) { setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setMoreQuestionsError(null); setMoreQuestionsStatus(null); setAnalysisAttempted(false); setAnalysisStage("idle"); setStatus("idle"); setActiveStep(1); setLanguageChangeNotice(true); }
+    if (localeStrategy === "reset-analysis-and-practice") { resetPractice(); setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setMoreQuestionsError(null); setMoreQuestionsStatus(null); setAnalysisAttempted(false); setAnalysisStage("idle"); setStatus("idle"); setActiveStep(1); setLanguageChangeNotice(true); }
+  }
+
+  function cancelPracticeSubmission() {
+    practiceRequestId.current += 1;
+    practiceTimer.current.cancel();
+    setPracticeSubmitting(false);
   }
 
   function resetPractice() {
-    practiceRequestId.current += 1;
+    cancelPracticeSubmission();
     lastPracticedQuestion.current = null;
-    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeSubmitting(false); setPracticeError(null); setPracticeEvaluation(null);
+    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null);
   }
 
   function startPractice(question: InterviewPreparation["questions"][number], index: number) {
@@ -119,14 +135,14 @@ export default function Home() {
       setSelectedPracticeQuestion({ question, index });
       return;
     }
-    practiceRequestId.current += 1;
+    cancelPracticeSubmission();
     lastPracticedQuestion.current = question;
-    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(""); setPracticeSubmitting(false); setPracticeError(null); setPracticeEvaluation(null);
+    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null);
   }
 
   function returnToQuestionList() {
-    practiceRequestId.current += 1;
-    setPracticeSubmitting(false); setSelectedPracticeQuestion(null);
+    cancelPracticeSubmission();
+    setSelectedPracticeQuestion(null);
   }
 
   function updatePracticeAnswer(answer: string) {
@@ -135,7 +151,7 @@ export default function Home() {
   }
 
   function submitPracticeAnswer() {
-    if (practiceSubmitting) return;
+    if (practiceSubmitting || practiceTimer.current.hasPending()) return;
     const validationError = validatePracticeAnswer(practiceAnswer);
     if (validationError) {
       const key = validationError === "required" ? "answerRequired" : validationError === "tooShort" ? "answerTooShort" : "answerTooLong";
@@ -144,10 +160,11 @@ export default function Home() {
     }
     const requestId = ++practiceRequestId.current;
     setPracticeError(null); setPracticeSubmitting(true);
-    window.setTimeout(() => {
+    practiceTimer.current.cancel();
+    practiceTimer.current.start(() => {
       if (practiceRequestId.current !== requestId) return;
       setPracticeEvaluation(mockAnswerEvaluations[practiceLocale.current]); setPracticeSubmitting(false);
-    }, 800);
+    });
   }
 
   function handleResumeSelect(file: File) {
@@ -247,6 +264,8 @@ export default function Home() {
       return;
     }
     if (!analysisGuard.current.tryStart()) return;
+
+    resetPractice();
 
     setAnalysisResult(null);
     setPreparation(null);
