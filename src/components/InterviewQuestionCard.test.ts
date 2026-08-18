@@ -12,4 +12,10 @@ describe("interview question category labels", () => {
   it.each(["zh-TW", "zh-CN", "en"] as const)("uses localized labels for %s", (locale) => {
     expect(Object.values(categoryMessageKeys).map((key) => translate(locale, key))).toEqual(expected[locale]);
   });
+
+  it("provides the practice action in every supported language", () => {
+    expect(translate("zh-TW", "practiceQuestion")).toBe("開始練習");
+    expect(translate("zh-CN", "practiceQuestion")).toBe("开始练习");
+    expect(translate("en", "practiceQuestion")).toBe("Practice this question");
+  });
 });

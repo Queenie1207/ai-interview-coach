@@ -11,13 +11,17 @@ import { ResumeUploader } from "@/components/ResumeUploader";
 import { StructuredResumeResult } from "@/components/StructuredResumeResult";
 import { StepNavigation, type WorkflowStep } from "@/components/StepNavigation";
 import { InterviewPreparationPanel } from "@/components/InterviewPreparationPanel";
+import { InterviewPracticePanel } from "@/components/InterviewPracticePanel";
+import { mockAnswerEvaluations } from "@/data/mockAnswerEvaluations";
+import { validatePracticeAnswer } from "@/lib/practice/answerValidation";
 import type { AnalysisStatus, InterviewAnalysis, InterviewAnalysisResponse } from "@/types/analysis";
 import type { ParsedResume, ResumeParseResponse } from "@/types/resumeParse";
 import type { ResumeData, ResumeStructureResponse } from "@/types/resume";
 import { validateResumeFile } from "@/utils/fileValidation";
 import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, resolveInitialLocale, type SupportedLocale } from "@/lib/i18n/locales";
 import { translate, type MessageKey } from "@/lib/i18n/messages";
-import type { InterviewPreparation, InterviewPreparationResponse } from "@/types/preparation";
+import type { InterviewPreparation, InterviewPreparationResponse, MoreInterviewQuestionsResponse } from "@/types/preparation";
+import type { MockAnswerEvaluation } from "@/types/practice";
 import { createRequestGuard, getStepAvailability, inputsAreDisabled, stepAfterAnalysisCompletes } from "@/lib/workflow/workflowState";
 
 type FormErrors = {
@@ -55,13 +59,25 @@ export default function Home() {
   const [preparation, setPreparation] = useState<InterviewPreparation | null>(null);
   const [preparationLoading, setPreparationLoading] = useState(false);
   const [preparationError, setPreparationError] = useState<string | null>(null);
+  const [moreQuestionsLoading, setMoreQuestionsLoading] = useState(false);
+  const [moreQuestionsError, setMoreQuestionsError] = useState<string | null>(null);
+  const [moreQuestionsStatus, setMoreQuestionsStatus] = useState<string | null>(null);
   const [analysisAttempted, setAnalysisAttempted] = useState(false);
   const [analysisStage, setAnalysisStage] = useState<"idle" | "parsing" | "structuring" | "analyzing">("idle");
+  const [selectedPracticeQuestion, setSelectedPracticeQuestion] = useState<{ question: InterviewPreparation["questions"][number]; index: number } | null>(null);
+  const [practiceAnswer, setPracticeAnswer] = useState("");
+  const [practiceSubmitting, setPracticeSubmitting] = useState(false);
+  const [practiceError, setPracticeError] = useState<string | null>(null);
+  const [practiceEvaluation, setPracticeEvaluation] = useState<MockAnswerEvaluation | null>(null);
+  const practiceRequestId = useRef(0);
+  const lastPracticedQuestion = useRef<InterviewPreparation["questions"][number] | null>(null);
+  const practiceLocale = useRef<SupportedLocale>(DEFAULT_LOCALE);
   const analysisGuard = useRef(createRequestGuard());
   const preparationGuard = useRef(createRequestGuard());
+  const moreQuestionsGuard = useRef(createRequestGuard());
 
   const analysisLoading = status === "loading";
-  const inputDisabled = inputsAreDisabled({ analysisLoading, preparationLoading });
+  const inputDisabled = inputsAreDisabled({ analysisLoading, preparationLoading }) || moreQuestionsLoading;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -82,9 +98,56 @@ export default function Home() {
   function handleLocaleChange(nextLocale: SupportedLocale) {
     if (inputDisabled || nextLocale === locale) return;
     setLocale(nextLocale);
+    practiceLocale.current = nextLocale;
     localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
     setErrors({});
-    if (analysisResult || preparation || analysisAttempted) { setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setAnalysisAttempted(false); setAnalysisStage("idle"); setStatus("idle"); setActiveStep(1); setLanguageChangeNotice(true); }
+    if (selectedPracticeQuestion) {
+      if (practiceEvaluation) setPracticeEvaluation(mockAnswerEvaluations[nextLocale]);
+      return;
+    }
+    if (analysisResult || preparation || analysisAttempted) { setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setMoreQuestionsError(null); setMoreQuestionsStatus(null); setAnalysisAttempted(false); setAnalysisStage("idle"); setStatus("idle"); setActiveStep(1); setLanguageChangeNotice(true); }
+  }
+
+  function resetPractice() {
+    practiceRequestId.current += 1;
+    lastPracticedQuestion.current = null;
+    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeSubmitting(false); setPracticeError(null); setPracticeEvaluation(null);
+  }
+
+  function startPractice(question: InterviewPreparation["questions"][number], index: number) {
+    if (lastPracticedQuestion.current === question) {
+      setSelectedPracticeQuestion({ question, index });
+      return;
+    }
+    practiceRequestId.current += 1;
+    lastPracticedQuestion.current = question;
+    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(""); setPracticeSubmitting(false); setPracticeError(null); setPracticeEvaluation(null);
+  }
+
+  function returnToQuestionList() {
+    practiceRequestId.current += 1;
+    setPracticeSubmitting(false); setSelectedPracticeQuestion(null);
+  }
+
+  function updatePracticeAnswer(answer: string) {
+    setPracticeAnswer(answer);
+    if (practiceError) setPracticeError(null);
+  }
+
+  function submitPracticeAnswer() {
+    if (practiceSubmitting) return;
+    const validationError = validatePracticeAnswer(practiceAnswer);
+    if (validationError) {
+      const key = validationError === "required" ? "answerRequired" : validationError === "tooShort" ? "answerTooShort" : "answerTooLong";
+      setPracticeError(translate(locale, key));
+      return;
+    }
+    const requestId = ++practiceRequestId.current;
+    setPracticeError(null); setPracticeSubmitting(true);
+    window.setTimeout(() => {
+      if (practiceRequestId.current !== requestId) return;
+      setPracticeEvaluation(mockAnswerEvaluations[practiceLocale.current]); setPracticeSubmitting(false);
+    }, 800);
   }
 
   function handleResumeSelect(file: File) {
@@ -97,11 +160,13 @@ export default function Home() {
     }
 
     setResumeFile(file);
+    resetPractice();
     setParsedResume(null);
     setResumeParseError(null);
     setAnalysisResult(null);
     setPreparation(null);
     setPreparationError(null);
+    setMoreQuestionsError(null); setMoreQuestionsStatus(null);
     setStructuredResume(null);
     setStructureError(null);
     setAnalysisError(null);
@@ -114,12 +179,14 @@ export default function Home() {
   }
 
   function handleResumeRemove() {
+    resetPractice();
     setResumeFile(null);
     setParsedResume(null);
     setResumeParseError(null);
     setAnalysisResult(null);
     setPreparation(null);
     setPreparationError(null);
+    setMoreQuestionsError(null); setMoreQuestionsStatus(null);
     setStructuredResume(null);
     setStructureError(null);
     setAnalysisError(null);
@@ -131,11 +198,13 @@ export default function Home() {
   }
 
   function updateJobInput(field: keyof JobInputs, value: string) {
+    resetPractice();
     setJobInputs((currentInputs) => ({ ...currentInputs, [field]: value }));
     setAnalysisResult(null);
     setPreparation(null);
     setAnalysisError(null);
     setPreparationError(null);
+    setMoreQuestionsError(null); setMoreQuestionsStatus(null);
     setLanguageChangeNotice(false);
     setStatus("idle");
     setAnalysisAttempted(false);
@@ -288,6 +357,22 @@ export default function Home() {
     finally { setPreparationLoading(false); preparationGuard.current.finish(); }
   }
 
+  async function handleGenerateMoreQuestions() {
+    if (!structuredResume || !analysisResult || !preparation || preparation.questions.length >= 20 || !moreQuestionsGuard.current.tryStart()) return;
+    const count = Math.min(5, 20 - preparation.questions.length);
+    setMoreQuestionsError(null); setMoreQuestionsStatus(null); setMoreQuestionsLoading(true);
+    try {
+      const response = await fetch("/api/interview/prepare/more", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resume: structuredResume, jobDescription: jobInputs.jobDescription.trim(), analysis: analysisResult, outputLanguage: locale, companyName: jobInputs.companyName, positionName: jobInputs.positionName, excludedQuestions: preparation.questions.map(({ question, followUps }) => ({ question, followUps })), count }) });
+      const body = (await response.json()) as MoreInterviewQuestionsResponse;
+      if (!body.success) { setMoreQuestionsError(localizedApiError(body.error.code, "moreQuestionsFailed")); return; }
+      const added = body.data.questions.slice(0, count);
+      if (added.length === 0) { setMoreQuestionsStatus(translate(locale, "noDistinctQuestions")); return; }
+      setPreparation((current) => current ? { ...current, questions: [...current.questions, ...added].slice(0, 20) } : current);
+      setMoreQuestionsStatus(translate(locale, "questionsAdded").replace("{count}", String(added.length)));
+    } catch { setMoreQuestionsError(translate(locale, "moreQuestionsFailed")); }
+    finally { setMoreQuestionsLoading(false); moreQuestionsGuard.current.finish(); }
+  }
+
   const enabled = getStepAvailability({ hasStructuredResume: Boolean(structuredResume), analysisStarted: analysisAttempted, hasAnalysis: Boolean(analysisResult) });
   const completed: Record<WorkflowStep, boolean> = { 1: Boolean(structuredResume), 2: Boolean(structuredResume), 3: Boolean(analysisResult), 4: Boolean(preparation) };
 
@@ -331,7 +416,8 @@ export default function Home() {
         {activeStep === 3 && analysisResult ? (
           <AnalysisResultPanel locale={locale} result={analysisResult} />
         ) : null}
-        {activeStep === 4 && analysisResult ? <InterviewPreparationPanel locale={locale} preparation={preparation} loading={preparationLoading} error={preparationError} onGenerate={handlePrepare} /> : null}
+        {activeStep === 4 && analysisResult && selectedPracticeQuestion ? <InterviewPracticePanel locale={locale} question={selectedPracticeQuestion.question} number={selectedPracticeQuestion.index + 1} answer={practiceAnswer} submitting={practiceSubmitting} error={practiceError} evaluation={practiceEvaluation} onAnswerChange={updatePracticeAnswer} onSubmit={submitPracticeAnswer} onBack={returnToQuestionList} /> : null}
+        {activeStep === 4 && analysisResult && !selectedPracticeQuestion ? <InterviewPreparationPanel locale={locale} preparation={preparation} loading={preparationLoading} error={preparationError} onGenerate={handlePrepare} moreLoading={moreQuestionsLoading} moreError={moreQuestionsError} moreStatus={moreQuestionsStatus} onGenerateMore={handleGenerateMoreQuestions} onPractice={startPractice} /> : null}
       </main>
     </div>
   );

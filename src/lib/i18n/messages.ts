@@ -14,8 +14,12 @@ const en = {
   strong: "Strong match", moderate: "Moderate match", weak: "Weak match", partial: "Partial", missing: "Missing", analysisLanguageChanged: "The analysis language has changed. Please run the analysis again.",
   stepResumeJob: "Resume & Job", stepStructuredResume: "Structured Resume", stepMatchAnalysis: "Match Analysis", stepPreparation: "Interview Preparation", completed: "Completed", unavailable: "Unavailable",
   preparationIntro: "Create personalized interview questions and review priorities from your resume, job description, and match analysis.", generatePreparation: "Generate Interview Preparation", generatingPreparation: "Generating interview preparation…", preparationUnknown: "We could not generate interview preparation. Please try again.", retryAnalysis: "Retry Analysis", retryPreparation: "Retry Preparation",
+  generateMoreQuestions: "Generate more questions", generatingMoreQuestions: "Generating more questions…", retryMoreQuestions: "Retry generation", questionsAdded: "Added {count} questions", noDistinctQuestions: "No sufficiently different new questions were found.", currentQuestionCount: "Currently {count} questions", maximumQuestions: "Maximum 20 questions", questionLimitReached: "The 20-question limit has been reached.", moreQuestionsFailed: "We could not generate more questions. Please try again.",
   interviewQuestions: "Interview Questions", reviewTopics: "Review Topics", whyAsked: "Why this may be asked", relatedRequirement: "Related requirement", answerOutline: "Answer outline", starOutline: "STAR outline", situation: "Situation", task: "Task", action: "Action", result: "Result", followUps: "Follow-up questions", difficulty: "Difficulty", priority: "Priority", relatedQuestions: "Related questions", high: "High", medium: "Medium", low: "Low", basic: "Basic", intermediate: "Intermediate", advanced: "Advanced",
   categoryIntroduction: "Introduction", categoryResume: "Resume", categoryProject: "Project", categoryTechnical: "Technical", categoryBehavioral: "Behavioral", categoryGap: "Gap", categorySituational: "Situational",
+  practiceQuestion: "Practice this question", backToQuestions: "Back to question list", yourAnswer: "Your answer", practiceAnswerPlaceholder: "Write your interview answer here...", submitAnswer: "Submit answer", evaluateAgain: "Evaluate again", evaluatingAnswer: "Evaluating your answer…",
+  answerRequired: "Please enter your answer.", answerTooShort: "Your answer must be at least 20 characters.", answerTooLong: "Your answer must be no more than 5000 characters.", mockEvaluationPreview: "Mock Evaluation Preview", mockEvaluationDisclaimer: "This is a fixed UI preview, not an AI evaluation of your answer.", mockExampleLabel: "Mock example — not generated from your answer.",
+  overallScore: "Overall Score", relevanceScore: "Relevance", evidenceScore: "Evidence", structureScore: "Structure", clarityScore: "Clarity", overallFeedback: "Overall feedback", evaluationStrengths: "What went well", evaluationImprovements: "What could improve", missingPoints: "Missing points", suggestedOutline: "Suggested answer structure", improvedAnswer: "Improved answer example", suggestedFollowUp: "Suggested follow-up",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -35,8 +39,12 @@ const zhTW: Messages = {
   strong: "匹配度高", moderate: "匹配度中等", weak: "匹配度較低", partial: "部分匹配", missing: "缺少", analysisLanguageChanged: "分析語言已變更，請重新分析。",
   stepResumeJob: "履歷與職位", stepStructuredResume: "結構化履歷", stepMatchAnalysis: "匹配分析", stepPreparation: "面試準備", completed: "已完成", unavailable: "尚未開放",
   preparationIntro: "根據履歷、職位說明與匹配分析，產生個人化面試題和複習重點。", generatePreparation: "產生面試準備", generatingPreparation: "正在產生面試準備……", preparationUnknown: "無法產生面試準備，請再試一次。", retryAnalysis: "重試分析", retryPreparation: "重試產生",
+  generateMoreQuestions: "產生更多題目", generatingMoreQuestions: "正在產生更多題目……", retryMoreQuestions: "重試產生", questionsAdded: "已新增 {count} 題", noDistinctQuestions: "沒有找到足夠不同的新題目。", currentQuestionCount: "目前共有 {count} 題", maximumQuestions: "最多 20 題", questionLimitReached: "已達到 20 題上限。", moreQuestionsFailed: "產生更多題目失敗，請再試一次。",
   interviewQuestions: "面試題目", reviewTopics: "複習主題", whyAsked: "為何可能被問", relatedRequirement: "對應需求", answerOutline: "回答大綱", starOutline: "STAR 大綱", situation: "情境", task: "任務", action: "行動", result: "結果", followUps: "追問題", difficulty: "難度", priority: "優先度", relatedQuestions: "相關題目", high: "高優先", medium: "中優先", low: "低優先", basic: "基礎", intermediate: "中等", advanced: "進階",
   categoryIntroduction: "自我介紹", categoryResume: "履歷", categoryProject: "專案", categoryTechnical: "技術", categoryBehavioral: "行為", categoryGap: "缺口", categorySituational: "情境",
+  practiceQuestion: "開始練習", backToQuestions: "返回題目清單", yourAnswer: "您的回答", practiceAnswerPlaceholder: "請在此輸入您的面試回答……", submitAnswer: "提交回答", evaluateAgain: "再次評估", evaluatingAnswer: "正在評估您的回答……",
+  answerRequired: "請輸入您的回答。", answerTooShort: "回答至少需要 20 個字元。", answerTooLong: "回答不得超過 5000 個字元。", mockEvaluationPreview: "Mock 評估預覽", mockEvaluationDisclaimer: "這是固定的 UI 測試預覽，並非 AI 根據您的回答產生的評估。", mockExampleLabel: "Mock 示例，並非根據您的回答產生。",
+  overallScore: "整體分數", relevanceScore: "相關性", evidenceScore: "證據", structureScore: "結構", clarityScore: "清晰度", overallFeedback: "整體評語", evaluationStrengths: "做得好的地方", evaluationImprovements: "可以改善的地方", missingPoints: "缺少內容", suggestedOutline: "建議回答結構", improvedAnswer: "改善後回答示例", suggestedFollowUp: "建議追問",
 };
 
 const zhCN: Messages = {
@@ -54,8 +62,12 @@ const zhCN: Messages = {
   strong: "匹配度高", moderate: "匹配度中等", weak: "匹配度较低", partial: "部分匹配", missing: "缺少", analysisLanguageChanged: "分析语言已更改，请重新分析。",
   stepResumeJob: "履历与职位", stepStructuredResume: "结构化履历", stepMatchAnalysis: "匹配分析", stepPreparation: "面试准备", completed: "已完成", unavailable: "尚未开放",
   preparationIntro: "根据履历、职位说明与匹配分析，生成个人化面试题和复习重点。", generatePreparation: "生成面试准备", generatingPreparation: "正在生成面试准备……", preparationUnknown: "无法生成面试准备，请重试。", retryAnalysis: "重试分析", retryPreparation: "重试生成",
+  generateMoreQuestions: "生成更多题目", generatingMoreQuestions: "正在生成更多题目……", retryMoreQuestions: "重试生成", questionsAdded: "已新增 {count} 题", noDistinctQuestions: "没有找到足够不同的新题目。", currentQuestionCount: "目前共有 {count} 题", maximumQuestions: "最多 20 题", questionLimitReached: "已达到 20 题上限。", moreQuestionsFailed: "生成更多题目失败，请重试。",
   interviewQuestions: "面试题目", reviewTopics: "复习主题", whyAsked: "为何可能被问", relatedRequirement: "对应要求", answerOutline: "回答大纲", starOutline: "STAR 大纲", situation: "情境", task: "任务", action: "行动", result: "结果", followUps: "追问", difficulty: "难度", priority: "优先级", relatedQuestions: "相关题目", high: "高优先", medium: "中优先", low: "低优先", basic: "基础", intermediate: "中等", advanced: "进阶",
   categoryIntroduction: "自我介绍", categoryResume: "简历", categoryProject: "项目", categoryTechnical: "技术", categoryBehavioral: "行为", categoryGap: "差距", categorySituational: "情境",
+  practiceQuestion: "开始练习", backToQuestions: "返回题目列表", yourAnswer: "您的回答", practiceAnswerPlaceholder: "请在此输入您的面试回答……", submitAnswer: "提交回答", evaluateAgain: "再次评估", evaluatingAnswer: "正在评估您的回答……",
+  answerRequired: "请输入您的回答。", answerTooShort: "回答至少需要 20 个字符。", answerTooLong: "回答不得超过 5000 个字符。", mockEvaluationPreview: "Mock 评估预览", mockEvaluationDisclaimer: "这是固定的 UI 测试预览，并非 AI 根据您的回答生成的评估。", mockExampleLabel: "Mock 示例，并非根据您的回答生成。",
+  overallScore: "整体分数", relevanceScore: "相关性", evidenceScore: "证据", structureScore: "结构", clarityScore: "清晰度", overallFeedback: "整体评语", evaluationStrengths: "做得好的地方", evaluationImprovements: "可以改进的地方", missingPoints: "缺少内容", suggestedOutline: "建议回答结构", improvedAnswer: "改进后回答示例", suggestedFollowUp: "建议追问",
 };
 
 export const messages: Record<SupportedLocale, Messages> = { "zh-TW": zhTW, "zh-CN": zhCN, en };

@@ -33,10 +33,15 @@ The page uses four in-memory steps on one App Router URL and renders only the ac
 - `StepNavigation` exposes accessible active, completed, and disabled states.
 - `InterviewPreparationPanel` renders preparation actions, questions, and review topics.
 - `InterviewQuestionCard` provides the native-button accordion interaction.
+- `InterviewPracticePanel` composes the selected-question view, answer form, and mock result.
+- `PracticeAnswerForm` owns accessible answer input and validation presentation.
+- `MockAnswerEvaluationPanel` renders the clearly labeled local preview data.
 
 ## Phase 3B data flow and API
 
 Validated `ResumeData` + Job Description + `InterviewAnalysis` + output language -> `POST /api/interview/prepare` -> one Gemini strict JSON Schema call -> `InterviewPreparationSchema.safeParse` -> preparation UI. PDF and extracted text are never sent to Phase 3B.
+
+Additional-question flow: validated `ResumeData` + Job Description + `InterviewAnalysis` + output language + prior question/follow-up text + count -> `POST /api/interview/prepare/more`. The server reduces the analysis to summary, strengths/evidence, gaps/status/evidence, and interview-focus requirements/evidence before one Gemini call. Provider-only `starOutlineParts` is normalized to the public nullable `starOutline`, Zod validates the result, and deterministic text filtering removes direct or clearly overlapping duplicates before the browser appends up to the 20-question limit. Existing question details and review topics are neither sent as exclusion context nor regenerated.
 
 ## State flow
 
@@ -92,6 +97,8 @@ Supported error codes are `FILE_REQUIRED`, `INVALID_FILE_TYPE`, `FILE_TOO_LARGE`
 ## Mock-data flow
 
 Analysis types live in `src/types`; the fixed phase-one analysis result lives in `src/data`. UI components receive typed data via props and do not embed mock analysis content. Phase 2A displays the parsed resume text separately and does not send it to an LLM.
+
+Phase 4A-1 answer evaluation is a client-only UI simulation. Fixed localized evaluation previews live in `src/data`; no answer, API key, or request is sent to a server. Leaving the practice subview invalidates a pending timer update, while the current answer and evaluation remain in page memory for returning to the same question.
 
 ## Deferred work
 

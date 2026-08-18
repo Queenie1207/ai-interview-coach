@@ -64,20 +64,22 @@ export function createSafeProviderDiagnostics(error: unknown): SafeProviderDiagn
   };
 }
 
-const string = () => ({ type: "string" } as const);
-const nullable = () => ({ type: ["string", "null"] } as const);
-const array = (items: object) => ({ type: "array", items } as const);
-const object = (properties: Record<string, object>) => ({ type: "object", additionalProperties: false, properties, required: Object.keys(properties) } as const);
+export const providerString = () => ({ type: "string" } as const);
+export const providerNullableString = () => ({ type: ["string", "null"] } as const);
+export const providerArray = (items: object) => ({ type: "array", items } as const);
+export const providerObject = (properties: Record<string, object>) => ({ type: "object", additionalProperties: false, properties, required: Object.keys(properties) } as const);
 
-export const interviewPreparationJsonSchema = object({
-  questions: { ...array(object({
-    category: { type: "string", enum: ["introduction", "resume", "project", "technical", "behavioral", "gap", "situational"] },
-    difficulty: { type: "string", enum: ["basic", "intermediate", "advanced"] },
-    question: string(), whyAsked: string(), relatedRequirement: nullable(), resumeEvidence: array(string()), jdEvidence: array(string()), answerOutline: array(string()),
-    starOutlineParts: array(string()),
-    followUps: array(string()),
-  })), minItems: 5, maxItems: 10 },
-  reviewTopics: { ...array(object({ topic: string(), reason: string(), priority: { type: "string", enum: ["high", "medium", "low"] }, relatedQuestions: array(string()) })), maxItems: 10 },
+export const interviewQuestionProviderJsonSchema = providerObject({
+  category: { type: "string", enum: ["introduction", "resume", "project", "technical", "behavioral", "gap", "situational"] },
+  difficulty: { type: "string", enum: ["basic", "intermediate", "advanced"] },
+  question: providerString(), whyAsked: providerString(), relatedRequirement: providerNullableString(), resumeEvidence: providerArray(providerString()), jdEvidence: providerArray(providerString()), answerOutline: providerArray(providerString()),
+  starOutlineParts: providerArray(providerString()),
+  followUps: providerArray(providerString()),
+});
+
+export const interviewPreparationJsonSchema = providerObject({
+  questions: { ...providerArray(interviewQuestionProviderJsonSchema), minItems: 5, maxItems: 10 },
+  reviewTopics: { ...providerArray(providerObject({ topic: providerString(), reason: providerString(), priority: { type: "string", enum: ["high", "medium", "low"] }, relatedQuestions: providerArray(providerString()) })), maxItems: 10 },
 });
 
 type Input = { resume: ResumeData; jobDescription: string; analysis: InterviewAnalysis; companyName?: string; positionName?: string; outputLanguage: SupportedLocale };

@@ -44,6 +44,12 @@ The API accepts `application/json` containing `{ "extractedText": "..." }`. Succ
 
 The home page uses four in-memory steps on the same URL: resume and job inputs, structured resume, match analysis, and interview preparation. `POST /api/interview/prepare` accepts validated `ResumeData`, Job Description, `InterviewAnalysis`, and an output language. It calls Gemini once with strict structured output, then independently validates the result with `InterviewPreparationSchema`. No PDF or extracted resume text is resent, and resume-sensitive state is never saved to local storage.
 
+Phase 3B.1 adds `POST /api/interview/prepare/more`. Each request asks for at most five additional questions, includes only prior main questions and follow-ups as exclusions, calls Gemini once without retry, and applies deterministic server-side duplicate filtering. Questions append in memory up to a maximum of 20; existing questions and review topics remain unchanged.
+
+## Phase 4A-1
+
+Interview preparation now includes an in-memory single-question practice view. Users can write and validate an answer, see a short simulated loading state, and review a clearly labeled fixed mock evaluation. The practice flow does not call an API or persist answers.
+
 ## Install
 
 ```bash

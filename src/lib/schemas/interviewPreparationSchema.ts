@@ -35,4 +35,9 @@ export const InterviewPreparationSchema = z.object({
   reviewTopics: z.array(ReviewTopicSchema).max(10),
 }).strict();
 
+export const MoreInterviewQuestionsSchema = z.object({
+  questions: z.array(InterviewQuestionSchema).max(5),
+}).strict();
+
 export type InterviewPreparation = z.infer<typeof InterviewPreparationSchema>;
+export type MoreInterviewQuestions = z.infer<typeof MoreInterviewQuestionsSchema>;
