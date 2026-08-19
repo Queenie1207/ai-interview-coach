@@ -15,6 +15,7 @@ import { InterviewPracticePanel } from "@/components/InterviewPracticePanel";
 import { validatePracticeAnswer } from "@/lib/practice/answerValidation";
 import { buildPracticeEvaluationRequest, createPracticeEvaluationRequestController } from "@/lib/practice/practiceEvaluationClient";
 import { getPracticeLocaleChangeStrategy } from "@/lib/practice/practiceLocalePolicy";
+import { createPracticeSessionStore, isEvaluationCurrent } from "@/lib/practice/practiceSessionStore";
 import type { AnalysisStatus, InterviewAnalysis, InterviewAnalysisResponse } from "@/types/analysis";
 import type { ParsedResume, ResumeParseResponse } from "@/types/resumeParse";
 import type { ResumeData, ResumeStructureResponse } from "@/types/resume";
@@ -70,8 +71,9 @@ export default function Home() {
   const [practiceSubmitting, setPracticeSubmitting] = useState(false);
   const [practiceError, setPracticeError] = useState<string | null>(null);
   const [practiceEvaluation, setPracticeEvaluation] = useState<InterviewAnswerEvaluation | null>(null);
+  const [lastEvaluatedAnswerSnapshot, setLastEvaluatedAnswerSnapshot] = useState<string | null>(null);
   const practiceRequestId = useRef(0);
-  const lastPracticedQuestion = useRef<InterviewPreparation["questions"][number] | null>(null);
+  const practiceSessions = useRef(createPracticeSessionStore<InterviewPreparation["questions"][number], InterviewAnswerEvaluation>());
   const practiceLocale = useRef<SupportedLocale>(DEFAULT_LOCALE);
   const practiceRequest = useRef(createPracticeEvaluationRequestController());
   const analysisGuard = useRef(createRequestGuard());
@@ -131,18 +133,14 @@ export default function Home() {
 
   function resetPractice() {
     cancelPracticeSubmission();
-    lastPracticedQuestion.current = null;
-    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null);
+    practiceSessions.current.clear();
+    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null); setLastEvaluatedAnswerSnapshot(null);
   }
 
   function startPractice(question: InterviewPreparation["questions"][number], index: number) {
-    if (lastPracticedQuestion.current === question) {
-      setSelectedPracticeQuestion({ question, index });
-      return;
-    }
     cancelPracticeSubmission();
-    lastPracticedQuestion.current = question;
-    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null);
+    const session = practiceSessions.current.get(question);
+    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(session.answer); setPracticeError(null); setPracticeEvaluation(session.evaluation); setLastEvaluatedAnswerSnapshot(session.lastEvaluatedAnswerSnapshot);
   }
 
   function returnToQuestionList() {
@@ -152,6 +150,7 @@ export default function Home() {
 
   function updatePracticeAnswer(answer: string) {
     setPracticeAnswer(answer);
+    if (selectedPracticeQuestion) practiceSessions.current.save(selectedPracticeQuestion.question, { answer, evaluation: practiceEvaluation, lastEvaluatedAnswerSnapshot });
     if (practiceError) setPracticeError(null);
   }
 
@@ -165,12 +164,15 @@ export default function Home() {
     }
     const requestId = ++practiceRequestId.current;
     setPracticeError(null); setPracticeSubmitting(true);
-    const payload = buildPracticeEvaluationRequest(selectedPracticeQuestion.question, practiceAnswer, practiceLocale.current);
+    const submittedAnswer = practiceAnswer;
+    const submittedQuestion = selectedPracticeQuestion.question;
+    const payload = buildPracticeEvaluationRequest(submittedQuestion, submittedAnswer, practiceLocale.current);
     const result = await practiceRequest.current.submit(payload);
     if (practiceRequestId.current !== requestId || result.status !== "completed") return;
     setPracticeSubmitting(false);
     if (!result.response.success) { setPracticeError(localizedPracticeEvaluationError(result.response.error.code)); return; }
-    setPracticeEvaluation(result.response.data);
+    setPracticeEvaluation(result.response.data); setLastEvaluatedAnswerSnapshot(submittedAnswer);
+    practiceSessions.current.save(submittedQuestion, { answer: submittedAnswer, evaluation: result.response.data, lastEvaluatedAnswerSnapshot: submittedAnswer });
   }
 
   function handleResumeSelect(file: File) {
@@ -441,7 +443,7 @@ export default function Home() {
         {activeStep === 3 && analysisResult ? (
           <AnalysisResultPanel locale={locale} result={analysisResult} />
         ) : null}
-        {activeStep === 4 && analysisResult && selectedPracticeQuestion ? <InterviewPracticePanel locale={locale} question={selectedPracticeQuestion.question} number={selectedPracticeQuestion.index + 1} answer={practiceAnswer} submitting={practiceSubmitting} error={practiceError} evaluation={practiceEvaluation} onAnswerChange={updatePracticeAnswer} onSubmit={submitPracticeAnswer} onBack={returnToQuestionList} /> : null}
+        {activeStep === 4 && analysisResult && selectedPracticeQuestion ? <InterviewPracticePanel locale={locale} question={selectedPracticeQuestion.question} number={selectedPracticeQuestion.index + 1} answer={practiceAnswer} submitting={practiceSubmitting} error={practiceError} evaluation={practiceEvaluation} evaluationCurrent={isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)} onAnswerChange={updatePracticeAnswer} onSubmit={submitPracticeAnswer} onBack={returnToQuestionList} /> : null}
         {activeStep === 4 && analysisResult && !selectedPracticeQuestion ? <InterviewPreparationPanel locale={locale} preparation={preparation} loading={preparationLoading} error={preparationError} onGenerate={handlePrepare} moreLoading={moreQuestionsLoading} moreError={moreQuestionsError} moreStatus={moreQuestionsStatus} onGenerateMore={handleGenerateMoreQuestions} onPractice={startPractice} /> : null}
       </main>
     </div>

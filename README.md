@@ -54,6 +54,8 @@ Interview preparation now includes an in-memory single-question practice view. U
 
 `POST /api/interview/practice/evaluate` evaluates one practice answer with Gemini strict structured output and Zod runtime validation. The browser sends only the selected question context, the current answer, and output language—never the PDF, extracted text, full resume, full Job Description, analysis, review topics, or other questions. Requests are abortable in memory, never persisted, and never automatically retried or followed up.
 
+Each question keeps its answer and latest evaluation in page memory. If the answer changes after evaluation, the old result is hidden until the user explicitly submits again. Improved answers must preserve facts from the submitted answer; resume-only details may be suggested but not silently inserted, and JD evidence is relevance context rather than candidate experience.
+
 ## Install
 
 ```bash

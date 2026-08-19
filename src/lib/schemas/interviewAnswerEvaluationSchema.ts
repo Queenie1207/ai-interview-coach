@@ -11,6 +11,8 @@ export const InterviewAnswerEvaluationSchema = z.object({
   dimensions: z.object({ relevance: EvaluationDimensionSchema, evidence: EvaluationDimensionSchema, structure: EvaluationDimensionSchema, clarity: EvaluationDimensionSchema }).strict(),
   starEvaluation: StarEvaluationSchema.nullable(),
 }).strict().superRefine((value, context) => {
+  const expectedOverallScore = Math.round((value.dimensions.relevance.score + value.dimensions.evidence.score + value.dimensions.structure.score + value.dimensions.clarity.score) / 4);
+  if (value.overallScore !== expectedOverallScore) context.addIssue({ code: "custom", path: ["overallScore"], message: "Overall score must be the rounded mean of dimension scores." });
   if (!value.needsFollowUp && value.suggestedFollowUpQuestion !== null) context.addIssue({ code: "custom", path: ["suggestedFollowUpQuestion"], message: "Follow-up must be null when it is not needed." });
   if (value.needsFollowUp && value.suggestedFollowUpQuestion === null) context.addIssue({ code: "custom", path: ["suggestedFollowUpQuestion"], message: "Follow-up is required when needsFollowUp is true." });
 });

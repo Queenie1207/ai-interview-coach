@@ -21,6 +21,7 @@ const en = {
   answerRequired: "Please enter your answer.", answerTooShort: "Your answer must be at least 20 characters.", answerTooLong: "Your answer must be no more than 5000 characters.",
   overallScore: "Overall Score", relevanceScore: "Relevance", evidenceScore: "Evidence", structureScore: "Structure", clarityScore: "Clarity", overallFeedback: "Overall feedback", evaluationStrengths: "What went well", evaluationImprovements: "What could improve", missingPoints: "Missing points", improvedAnswer: "Improved answer example", suggestedFollowUp: "Suggested follow-up",
   answerEvaluation: "Answer Evaluation", noEvaluationItems: "No items identified.", starEvaluation: "STAR evaluation", followUpSignalOnly: "This follow-up is a suggestion only and will not start another interview turn.", practiceEvaluationFailed: "We could not evaluate your answer. Your answer has been kept; please try again.", evaluationCancelledForLanguage: "The pending evaluation was cancelled because the language changed. Your answer has been kept.", answerEvaluationNotConfigured: "Answer evaluation is not configured on the server.", answerEvaluationAuthentication: "The answer evaluation service could not authenticate.", answerEvaluationRateLimited: "The answer evaluation service is busy. Please try again later.", answerEvaluationUpstream: "The answer evaluation service is temporarily unavailable. Please try again.", answerEvaluationInvalidOutput: "The answer evaluation returned invalid data. Please try again.",
+  answerChangedEvaluationStale: "Your answer has changed. The previous evaluation is hidden; submit again to evaluate the current answer.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -47,6 +48,7 @@ const zhTW: Messages = {
   answerRequired: "請輸入您的回答。", answerTooShort: "回答至少需要 20 個字元。", answerTooLong: "回答不得超過 5000 個字元。",
   overallScore: "整體分數", relevanceScore: "相關性", evidenceScore: "證據", structureScore: "結構", clarityScore: "清晰度", overallFeedback: "整體評語", evaluationStrengths: "做得好的地方", evaluationImprovements: "可以改善的地方", missingPoints: "缺少內容", improvedAnswer: "改善後回答示例", suggestedFollowUp: "建議追問",
   answerEvaluation: "回答評估", noEvaluationItems: "未發現相關項目。", starEvaluation: "STAR 評估", followUpSignalOnly: "此追問僅為建議，不會自動開始下一輪面試。", practiceEvaluationFailed: "無法評估您的回答；回答已保留，請再試一次。", evaluationCancelledForLanguage: "語言切換已取消進行中的評估；您的回答已保留。", answerEvaluationNotConfigured: "伺服器尚未設定回答評估服務。", answerEvaluationAuthentication: "回答評估服務驗證失敗。", answerEvaluationRateLimited: "回答評估服務忙碌中，請稍後再試。", answerEvaluationUpstream: "回答評估服務暫時無法使用，請再試一次。", answerEvaluationInvalidOutput: "回答評估傳回無效資料，請再試一次。",
+  answerChangedEvaluationStale: "您的回答已修改。舊評估已隱藏；請再次提交以評估目前回答。",
 };
 
 const zhCN: Messages = {
@@ -71,6 +73,7 @@ const zhCN: Messages = {
   answerRequired: "请输入您的回答。", answerTooShort: "回答至少需要 20 个字符。", answerTooLong: "回答不得超过 5000 个字符。",
   overallScore: "整体分数", relevanceScore: "相关性", evidenceScore: "证据", structureScore: "结构", clarityScore: "清晰度", overallFeedback: "整体评语", evaluationStrengths: "做得好的地方", evaluationImprovements: "可以改进的地方", missingPoints: "缺少内容", improvedAnswer: "改进后回答示例", suggestedFollowUp: "建议追问",
   answerEvaluation: "回答评估", noEvaluationItems: "未发现相关项目。", starEvaluation: "STAR 评估", followUpSignalOnly: "此追问仅为建议，不会自动开始下一轮面试。", practiceEvaluationFailed: "无法评估您的回答；回答已保留，请重试。", evaluationCancelledForLanguage: "语言切换已取消进行中的评估；您的回答已保留。", answerEvaluationNotConfigured: "服务器尚未配置回答评估服务。", answerEvaluationAuthentication: "回答评估服务身份验证失败。", answerEvaluationRateLimited: "回答评估服务繁忙，请稍后重试。", answerEvaluationUpstream: "回答评估服务暂时不可用，请重试。", answerEvaluationInvalidOutput: "回答评估返回无效数据，请重试。",
+  answerChangedEvaluationStale: "您的回答已修改。旧评估已隐藏；请再次提交以评估当前回答。",
 };
 
 export const messages: Record<SupportedLocale, Messages> = { "zh-TW": zhTW, "zh-CN": zhCN, en };

@@ -100,6 +100,8 @@ Analysis types live in `src/types`; the fixed phase-one analysis result lives in
 
 Phase 4A-2 posts only the selected question fields, current answer, and output language to `POST /api/interview/practice/evaluate`. The route strictly rejects unknown fields, calls Gemini once without retry, requests JSON Schema structured output, and validates it with `InterviewAnswerEvaluationSchema`. The request never includes the PDF, extracted text, complete resume, complete Job Description, analysis, review topics, or other questions. Leaving or changing the practice question aborts the active browser request and a generation guard ignores stale responses. Follow-up output is display-only and does not start an agent loop.
 
+Practice answers, evaluations, and the last evaluated answer snapshot are kept per question in page memory. Editing a submitted answer never sends a request; while it differs from its snapshot, the prior evaluation is hidden and the UI asks for another explicit submission. The evaluation prompt treats the current answer as the controlling source for `improvedAnswer`, uses resume evidence only for consistency or suggestions, uses JD evidence only for relevance, and applies motivation, behavioral/experience, technical-knowledge, and technical-debugging evidence standards without universally requiring metrics or STAR.
+
 ## Deferred work
 
 Future phases may add JD matching, interview analysis, OCR, RAG, and Tool Calling. None are implemented in Phase 2B.

@@ -20,4 +20,5 @@ describe("locales", () => {
     expect(messages[locale].preparationUnknown).toBeTruthy();
     expect(messages[locale].retryPreparation).toBeTruthy();
   });
+  it.each(["zh-TW", "zh-CN", "en"] as const)("has the stale evaluation notice for %s", (locale) => expect(messages[locale].answerChangedEvaluationStale).toBeTruthy());
 });
