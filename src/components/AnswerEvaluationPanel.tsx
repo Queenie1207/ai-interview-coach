@@ -1,0 +1,20 @@
+import type { SupportedLocale } from "@/lib/i18n/locales";
+import { translate, type MessageKey } from "@/lib/i18n/messages";
+import type { InterviewAnswerEvaluation } from "@/types/practice";
+
+function List({ values, empty }: { values: string[]; empty: string }) { return values.length ? <ul className="mt-2 list-disc space-y-1 pl-5">{values.map((value, index) => <li key={`${value}-${index}`}>{value}</li>)}</ul> : <p className="mt-2 text-zinc-500">{empty}</p>; }
+
+export function AnswerEvaluationPanel({ locale, evaluation }: { locale: SupportedLocale; evaluation: InterviewAnswerEvaluation }) {
+  const dimensions: Array<[MessageKey, InterviewAnswerEvaluation["dimensions"][keyof InterviewAnswerEvaluation["dimensions"]]]> = [["relevanceScore", evaluation.dimensions.relevance], ["evidenceScore", evaluation.dimensions.evidence], ["structureScore", evaluation.dimensions.structure], ["clarityScore", evaluation.dimensions.clarity]];
+  const sections: Array<[MessageKey, string[]]> = [["evaluationStrengths", evaluation.strengths], ["evaluationImprovements", evaluation.improvements], ["missingPoints", evaluation.missingPoints]];
+  return <section aria-live="polite" className="grid gap-5 rounded-lg border border-teal-200 bg-teal-50/40 p-5">
+    <p className="text-sm font-bold uppercase tracking-wide text-teal-800">{translate(locale, "answerEvaluation")}</p>
+    <div className="rounded-lg bg-white p-5 text-center shadow-sm"><h3 className="font-semibold">{translate(locale, "overallScore")}</h3><p className="mt-2 text-4xl font-bold text-teal-800">{evaluation.overallScore} <span className="text-lg text-zinc-500">/ 100</span></p></div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{dimensions.map(([key, dimension]) => <section key={key} className="rounded-lg bg-white p-4 shadow-sm"><h3 className="text-sm font-semibold text-zinc-600">{translate(locale, key)}</h3><p className="mt-1 text-2xl font-bold">{dimension.score} / 100</p><p className="mt-2 text-sm leading-6 text-zinc-700">{dimension.feedback}</p></section>)}</div>
+    <section className="rounded-lg bg-white p-5 shadow-sm"><h3 className="font-semibold">{translate(locale, "overallFeedback")}</h3><p className="mt-2 whitespace-pre-wrap break-words leading-7 text-zinc-700">{evaluation.summary}</p></section>
+    <div className="grid gap-4 md:grid-cols-3">{sections.map(([key, values]) => <section key={key} className="rounded-lg bg-white p-5 shadow-sm"><h3 className="font-semibold">{translate(locale, key)}</h3><List values={values} empty={translate(locale, "noEvaluationItems")} /></section>)}</div>
+    <section className="rounded-lg bg-white p-5 shadow-sm"><h3 className="font-semibold">{translate(locale, "improvedAnswer")}</h3><p className="mt-3 whitespace-pre-wrap break-words leading-7 text-zinc-700">{evaluation.improvedAnswer}</p></section>
+    {evaluation.starEvaluation ? <section className="rounded-lg bg-white p-5 shadow-sm"><h3 className="font-semibold">{translate(locale, "starEvaluation")}</h3><p className="mt-2 text-zinc-700">{evaluation.starEvaluation.feedback}</p><dl className="mt-3 grid gap-2 text-sm"><div><dt className="font-semibold">{translate(locale, "situation")}</dt><dd>{evaluation.starEvaluation.situation ?? translate(locale, "noEvidence")}</dd></div><div><dt className="font-semibold">{translate(locale, "task")}</dt><dd>{evaluation.starEvaluation.task ?? translate(locale, "noEvidence")}</dd></div><div><dt className="font-semibold">{translate(locale, "action")}</dt><dd>{evaluation.starEvaluation.action ?? translate(locale, "noEvidence")}</dd></div><div><dt className="font-semibold">{translate(locale, "result")}</dt><dd>{evaluation.starEvaluation.result ?? translate(locale, "noEvidence")}</dd></div></dl></section> : null}
+    {evaluation.needsFollowUp && evaluation.suggestedFollowUpQuestion ? <section className="rounded-lg bg-white p-5 shadow-sm"><h3 className="font-semibold">{translate(locale, "suggestedFollowUp")}</h3><p className="mt-2 leading-7 text-zinc-700">{evaluation.suggestedFollowUpQuestion}</p><p className="mt-2 text-xs text-zinc-500">{translate(locale, "followUpSignalOnly")}</p></section> : null}
+  </section>;
+}

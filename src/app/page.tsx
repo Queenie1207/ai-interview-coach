@@ -12,9 +12,8 @@ import { StructuredResumeResult } from "@/components/StructuredResumeResult";
 import { StepNavigation, type WorkflowStep } from "@/components/StepNavigation";
 import { InterviewPreparationPanel } from "@/components/InterviewPreparationPanel";
 import { InterviewPracticePanel } from "@/components/InterviewPracticePanel";
-import { mockAnswerEvaluations } from "@/data/mockAnswerEvaluations";
 import { validatePracticeAnswer } from "@/lib/practice/answerValidation";
-import { createPracticeEvaluationTimer } from "@/lib/practice/practiceEvaluationTimer";
+import { buildPracticeEvaluationRequest, createPracticeEvaluationRequestController } from "@/lib/practice/practiceEvaluationClient";
 import { getPracticeLocaleChangeStrategy } from "@/lib/practice/practiceLocalePolicy";
 import type { AnalysisStatus, InterviewAnalysis, InterviewAnalysisResponse } from "@/types/analysis";
 import type { ParsedResume, ResumeParseResponse } from "@/types/resumeParse";
@@ -23,7 +22,7 @@ import { validateResumeFile } from "@/utils/fileValidation";
 import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, resolveInitialLocale, type SupportedLocale } from "@/lib/i18n/locales";
 import { translate, type MessageKey } from "@/lib/i18n/messages";
 import type { InterviewPreparation, InterviewPreparationResponse, MoreInterviewQuestionsResponse } from "@/types/preparation";
-import type { MockAnswerEvaluation } from "@/types/practice";
+import type { InterviewAnswerEvaluation } from "@/types/practice";
 import { createRequestGuard, getStepAvailability, inputsAreDisabled, stepAfterAnalysisCompletes } from "@/lib/workflow/workflowState";
 
 type FormErrors = {
@@ -70,11 +69,11 @@ export default function Home() {
   const [practiceAnswer, setPracticeAnswer] = useState("");
   const [practiceSubmitting, setPracticeSubmitting] = useState(false);
   const [practiceError, setPracticeError] = useState<string | null>(null);
-  const [practiceEvaluation, setPracticeEvaluation] = useState<MockAnswerEvaluation | null>(null);
+  const [practiceEvaluation, setPracticeEvaluation] = useState<InterviewAnswerEvaluation | null>(null);
   const practiceRequestId = useRef(0);
   const lastPracticedQuestion = useRef<InterviewPreparation["questions"][number] | null>(null);
   const practiceLocale = useRef<SupportedLocale>(DEFAULT_LOCALE);
-  const practiceTimer = useRef(createPracticeEvaluationTimer());
+  const practiceRequest = useRef(createPracticeEvaluationRequestController());
   const analysisGuard = useRef(createRequestGuard());
   const preparationGuard = useRef(createRequestGuard());
   const moreQuestionsGuard = useRef(createRequestGuard());
@@ -83,7 +82,7 @@ export default function Home() {
   const inputDisabled = inputsAreDisabled({ analysisLoading, preparationLoading }) || moreQuestionsLoading;
 
   useEffect(() => {
-    const evaluationTimer = practiceTimer.current;
+    const evaluationRequest = practiceRequest.current;
     const timer = window.setTimeout(() => {
       const initialLocale = resolveInitialLocale(localStorage.getItem(LOCALE_STORAGE_KEY), navigator.language);
       practiceLocale.current = initialLocale;
@@ -91,7 +90,7 @@ export default function Home() {
     }, 0);
     return () => {
       window.clearTimeout(timer);
-      evaluationTimer.cancel();
+      evaluationRequest.cancel();
     };
   }, []);
 
@@ -100,8 +99,14 @@ export default function Home() {
       FILE_REQUIRED: "resumeRequired", INVALID_FILE_TYPE: "invalidPdf", FILE_TOO_LARGE: "pdfTooLarge",
       AI_NOT_CONFIGURED: "aiNotConfigured", AI_AUTHENTICATION_ERROR: "aiAuthentication", AI_RATE_LIMITED: "aiRateLimited",
       AI_UPSTREAM_ERROR: "aiUpstream", AI_EMPTY_OUTPUT: "aiInvalidOutput", AI_INVALID_JSON: "aiInvalidOutput", AI_OUTPUT_TRUNCATED: "aiOutputTruncated", AI_INVALID_OUTPUT: "aiInvalidOutput",
+      ANSWER_TOO_SHORT: "answerTooShort", ANSWER_TOO_LONG: "answerTooLong",
     };
     return translate(locale, keys[code] ?? fallback);
+  }
+
+  function localizedPracticeEvaluationError(code: string): string {
+    const keys: Record<string, MessageKey> = { AI_NOT_CONFIGURED: "answerEvaluationNotConfigured", AI_AUTHENTICATION_ERROR: "answerEvaluationAuthentication", AI_RATE_LIMITED: "answerEvaluationRateLimited", AI_UPSTREAM_ERROR: "answerEvaluationUpstream", AI_EMPTY_OUTPUT: "answerEvaluationInvalidOutput", AI_INVALID_JSON: "answerEvaluationInvalidOutput", AI_INVALID_OUTPUT: "answerEvaluationInvalidOutput", ANSWER_TOO_SHORT: "answerTooShort", ANSWER_TOO_LONG: "answerTooLong" };
+    return translate(locale, keys[code] ?? "practiceEvaluationFailed");
   }
 
   function handleLocaleChange(nextLocale: SupportedLocale) {
@@ -112,7 +117,7 @@ export default function Home() {
     setErrors({});
     const localeStrategy = getPracticeLocaleChangeStrategy({ hasActivePractice: Boolean(selectedPracticeQuestion), hasAnalysisState: Boolean(analysisResult || preparation || analysisAttempted) });
     if (localeStrategy === "preserve-practice") {
-      if (practiceEvaluation) setPracticeEvaluation(mockAnswerEvaluations[nextLocale]);
+      if (practiceSubmitting) { cancelPracticeSubmission(); setPracticeError(translate(nextLocale, "evaluationCancelledForLanguage")); }
       return;
     }
     if (localeStrategy === "reset-analysis-and-practice") { resetPractice(); setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setMoreQuestionsError(null); setMoreQuestionsStatus(null); setAnalysisAttempted(false); setAnalysisStage("idle"); setStatus("idle"); setActiveStep(1); setLanguageChangeNotice(true); }
@@ -120,7 +125,7 @@ export default function Home() {
 
   function cancelPracticeSubmission() {
     practiceRequestId.current += 1;
-    practiceTimer.current.cancel();
+    practiceRequest.current.cancel();
     setPracticeSubmitting(false);
   }
 
@@ -150,8 +155,8 @@ export default function Home() {
     if (practiceError) setPracticeError(null);
   }
 
-  function submitPracticeAnswer() {
-    if (practiceSubmitting || practiceTimer.current.hasPending()) return;
+  async function submitPracticeAnswer() {
+    if (practiceSubmitting || practiceRequest.current.hasPending() || !selectedPracticeQuestion) return;
     const validationError = validatePracticeAnswer(practiceAnswer);
     if (validationError) {
       const key = validationError === "required" ? "answerRequired" : validationError === "tooShort" ? "answerTooShort" : "answerTooLong";
@@ -160,11 +165,12 @@ export default function Home() {
     }
     const requestId = ++practiceRequestId.current;
     setPracticeError(null); setPracticeSubmitting(true);
-    practiceTimer.current.cancel();
-    practiceTimer.current.start(() => {
-      if (practiceRequestId.current !== requestId) return;
-      setPracticeEvaluation(mockAnswerEvaluations[practiceLocale.current]); setPracticeSubmitting(false);
-    });
+    const payload = buildPracticeEvaluationRequest(selectedPracticeQuestion.question, practiceAnswer, practiceLocale.current);
+    const result = await practiceRequest.current.submit(payload);
+    if (practiceRequestId.current !== requestId || result.status !== "completed") return;
+    setPracticeSubmitting(false);
+    if (!result.response.success) { setPracticeError(localizedPracticeEvaluationError(result.response.error.code)); return; }
+    setPracticeEvaluation(result.response.data);
   }
 
   function handleResumeSelect(file: File) {

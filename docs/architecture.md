@@ -35,7 +35,7 @@ The page uses four in-memory steps on one App Router URL and renders only the ac
 - `InterviewQuestionCard` provides the native-button accordion interaction.
 - `InterviewPracticePanel` composes the selected-question view, answer form, and mock result.
 - `PracticeAnswerForm` owns accessible answer input and validation presentation.
-- `MockAnswerEvaluationPanel` renders the clearly labeled local preview data.
+- `AnswerEvaluationPanel` renders the validated answer score, dimension feedback, optional STAR feedback, and follow-up signal.
 
 ## Phase 3B data flow and API
 
@@ -98,7 +98,7 @@ Supported error codes are `FILE_REQUIRED`, `INVALID_FILE_TYPE`, `FILE_TOO_LARGE`
 
 Analysis types live in `src/types`; the fixed phase-one analysis result lives in `src/data`. UI components receive typed data via props and do not embed mock analysis content. Phase 2A displays the parsed resume text separately and does not send it to an LLM.
 
-Phase 4A-1 answer evaluation is a client-only UI simulation. Fixed localized evaluation previews live in `src/data`; no answer, API key, or request is sent to a server. Leaving the practice subview invalidates a pending timer update, while the current answer and evaluation remain in page memory for returning to the same question.
+Phase 4A-2 posts only the selected question fields, current answer, and output language to `POST /api/interview/practice/evaluate`. The route strictly rejects unknown fields, calls Gemini once without retry, requests JSON Schema structured output, and validates it with `InterviewAnswerEvaluationSchema`. The request never includes the PDF, extracted text, complete resume, complete Job Description, analysis, review topics, or other questions. Leaving or changing the practice question aborts the active browser request and a generation guard ignores stale responses. Follow-up output is display-only and does not start an agent loop.
 
 ## Deferred work
 

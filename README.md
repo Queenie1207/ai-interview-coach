@@ -50,6 +50,10 @@ Phase 3B.1 adds `POST /api/interview/prepare/more`. Each request asks for at mos
 
 Interview preparation now includes an in-memory single-question practice view. Users can write and validate an answer, see a short simulated loading state, and review a clearly labeled fixed mock evaluation. The practice flow does not call an API or persist answers.
 
+## Phase 4A-2
+
+`POST /api/interview/practice/evaluate` evaluates one practice answer with Gemini strict structured output and Zod runtime validation. The browser sends only the selected question context, the current answer, and output language—never the PDF, extracted text, full resume, full Job Description, analysis, review topics, or other questions. Requests are abortable in memory, never persisted, and never automatically retried or followed up.
+
 ## Install
 
 ```bash
