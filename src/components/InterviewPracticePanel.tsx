@@ -1,5 +1,6 @@
 import { AnswerEvaluationPanel } from "@/components/AnswerEvaluationPanel";
 import { PracticeAnswerForm } from "@/components/PracticeAnswerForm";
+import { PracticeFollowUpPanel } from "@/components/PracticeFollowUpPanel";
 import { categoryMessageKeys } from "@/components/InterviewQuestionCard";
 import type { SupportedLocale } from "@/lib/i18n/locales";
 import { translate, type MessageKey } from "@/lib/i18n/messages";
@@ -8,7 +9,7 @@ import type { InterviewAnswerEvaluation } from "@/types/practice";
 
 type Question = InterviewPreparation["questions"][number];
 
-export function InterviewPracticePanel({ locale, question, number, answer, submitting, error, evaluation, evaluationCurrent, onAnswerChange, onSubmit, onBack }: { locale: SupportedLocale; question: Question; number: number; answer: string; submitting: boolean; error: string | null; evaluation: InterviewAnswerEvaluation | null; evaluationCurrent: boolean; onAnswerChange: (answer: string) => void; onSubmit: () => void; onBack: () => void }) {
+export function InterviewPracticePanel({ locale, question, number, answer, submitting, error, evaluation, evaluationCurrent, followUpOpen, followUpAnswer, followUpSubmitting, followUpError, finalEvaluation, onAnswerChange, onSubmit, onBack, onFollowUpOpen, onFollowUpCancel, onFollowUpAnswerChange, onFollowUpSubmit }: { locale: SupportedLocale; question: Question; number: number; answer: string; submitting: boolean; error: string | null; evaluation: InterviewAnswerEvaluation | null; evaluationCurrent: boolean; followUpOpen: boolean; followUpAnswer: string; followUpSubmitting: boolean; followUpError: string | null; finalEvaluation: InterviewAnswerEvaluation | null; onAnswerChange: (answer: string) => void; onSubmit: () => void; onBack: () => void; onFollowUpOpen: () => void; onFollowUpCancel: () => void; onFollowUpAnswerChange: (answer: string) => void; onFollowUpSubmit: () => void }) {
   return <section className="grid gap-6">
     <button type="button" onClick={onBack} className="w-fit rounded-md border border-zinc-300 bg-white px-4 py-2 font-semibold text-zinc-800 hover:bg-zinc-50">← {translate(locale, "backToQuestions")}</button>
     <article className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
@@ -18,6 +19,10 @@ export function InterviewPracticePanel({ locale, question, number, answer, submi
     </article>
     <PracticeAnswerForm locale={locale} answer={answer} submitting={submitting} error={error} hasEvaluation={Boolean(evaluation)} onAnswerChange={onAnswerChange} onSubmit={onSubmit} />
     {evaluation && !evaluationCurrent ? <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 font-medium text-amber-900">{translate(locale, "answerChangedEvaluationStale")}</p> : null}
-    {evaluation && evaluationCurrent ? <AnswerEvaluationPanel locale={locale} evaluation={evaluation} /> : null}
+    {evaluation && evaluationCurrent ? <AnswerEvaluationPanel locale={locale} evaluation={evaluation} titleKey="initialEvaluation" showFollowUp={false} /> : null}
+    {evaluation && evaluationCurrent && evaluation.needsFollowUp && evaluation.suggestedFollowUpQuestion ? <PracticeFollowUpPanel locale={locale} question={evaluation.suggestedFollowUpQuestion} originalAnswer={lastOriginalAnswer(answer, evaluationCurrent)} answer={followUpAnswer} open={followUpOpen} submitting={followUpSubmitting} error={followUpError} completed={Boolean(finalEvaluation)} onOpen={onFollowUpOpen} onCancel={onFollowUpCancel} onAnswerChange={onFollowUpAnswerChange} onSubmit={onFollowUpSubmit} /> : null}
+    {finalEvaluation && evaluationCurrent ? <AnswerEvaluationPanel locale={locale} evaluation={finalEvaluation} titleKey="finalEvaluation" showFollowUp={false} /> : null}
   </section>;
 }
+
+function lastOriginalAnswer(answer: string, evaluationCurrent: boolean): string { return evaluationCurrent ? answer : ""; }

@@ -102,6 +102,8 @@ Phase 4A-2 posts only the selected question fields, current answer, and output l
 
 Practice answers, evaluations, and the last evaluated answer snapshot are kept per question in page memory. Editing a submitted answer never sends a request; while it differs from its snapshot, the prior evaluation is hidden and the UI asks for another explicit submission. The evaluation prompt treats the current answer as the controlling source for `improvedAnswer`, uses resume evidence only for consistency or suggestions, uses JD evidence only for relevance, and applies motivation, behavioral/experience, technical-knowledge, and technical-debugging evidence standards without universally requiring metrics or STAR.
 
+Phase 4B-1 adds a separate explicit follow-up flow. The browser calls `POST /api/interview/practice/follow-up/evaluate` only after the user opens and submits the one follow-up form. The allowlisted payload contains one question's context, original answer, follow-up question and answer, and output language; it excludes the full resume, Job Description, analysis, preparation, other questions, and other answers. A separate abortable controller and generation guard prevent duplicate and stale writes. Each in-memory question session retains its follow-up draft, error, open state, and final evaluation. Editing the original answer invalidates the follow-up and final result. The final Zod and provider schemas force the flow to end without another follow-up.
+
 ## Deferred work
 
 Future phases may add JD matching, interview analysis, OCR, RAG, and Tool Calling. None are implemented in Phase 2B.

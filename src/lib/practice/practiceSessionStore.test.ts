@@ -4,15 +4,15 @@ import { createPracticeSessionStore, isEvaluationCurrent } from "./practiceSessi
 describe("practice session store", () => {
   it("preserves each question's answer, evaluation, and submitted snapshot", () => {
     const first = {}; const second = {}; const store = createPracticeSessionStore<object, string>();
-    store.save(first, { answer: "first answer", evaluation: "first evaluation", lastEvaluatedAnswerSnapshot: "first answer" });
-    store.save(second, { answer: "second answer", evaluation: null, lastEvaluatedAnswerSnapshot: null });
-    expect(store.get(first)).toEqual({ answer: "first answer", evaluation: "first evaluation", lastEvaluatedAnswerSnapshot: "first answer" });
+    store.save(first, { answer: "first answer", evaluation: "first evaluation", lastEvaluatedAnswerSnapshot: "first answer", followUpOpen: false, followUpAnswer: "detail", followUpError: null, finalEvaluation: "final" });
+    store.save(second, { answer: "second answer", evaluation: null, lastEvaluatedAnswerSnapshot: null, followUpOpen: false, followUpAnswer: "", followUpError: null, finalEvaluation: null });
+    expect(store.get(first)).toEqual({ answer: "first answer", evaluation: "first evaluation", lastEvaluatedAnswerSnapshot: "first answer", followUpOpen: false, followUpAnswer: "detail", followUpError: null, finalEvaluation: "final" });
     expect(store.get(second).answer).toBe("second answer");
   });
 
   it("keeps the answer after success or failure", () => {
     const question = {}; const store = createPracticeSessionStore<object, string>();
-    store.save(question, { answer: "submitted answer", evaluation: "result", lastEvaluatedAnswerSnapshot: "submitted answer" });
+    store.save(question, { answer: "submitted answer", evaluation: "result", lastEvaluatedAnswerSnapshot: "submitted answer", followUpOpen: false, followUpAnswer: "", followUpError: null, finalEvaluation: null });
     expect(store.get(question).answer).toBe("submitted answer");
     store.save(question, { ...store.get(question), evaluation: null });
     expect(store.get(question).answer).toBe("submitted answer");

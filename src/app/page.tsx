@@ -12,8 +12,9 @@ import { StructuredResumeResult } from "@/components/StructuredResumeResult";
 import { StepNavigation, type WorkflowStep } from "@/components/StepNavigation";
 import { InterviewPreparationPanel } from "@/components/InterviewPreparationPanel";
 import { InterviewPracticePanel } from "@/components/InterviewPracticePanel";
-import { validatePracticeAnswer } from "@/lib/practice/answerValidation";
+import { validateFollowUpAnswer, validatePracticeAnswer } from "@/lib/practice/answerValidation";
 import { buildPracticeEvaluationRequest, createPracticeEvaluationRequestController } from "@/lib/practice/practiceEvaluationClient";
+import { buildFollowUpEvaluationRequest, createFollowUpEvaluationRequestController } from "@/lib/practice/followUpEvaluationClient";
 import { getPracticeLocaleChangeStrategy } from "@/lib/practice/practiceLocalePolicy";
 import { createPracticeSessionStore, isEvaluationCurrent } from "@/lib/practice/practiceSessionStore";
 import type { AnalysisStatus, InterviewAnalysis, InterviewAnalysisResponse } from "@/types/analysis";
@@ -23,7 +24,7 @@ import { validateResumeFile } from "@/utils/fileValidation";
 import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, resolveInitialLocale, type SupportedLocale } from "@/lib/i18n/locales";
 import { translate, type MessageKey } from "@/lib/i18n/messages";
 import type { InterviewPreparation, InterviewPreparationResponse, MoreInterviewQuestionsResponse } from "@/types/preparation";
-import type { InterviewAnswerEvaluation } from "@/types/practice";
+import type { InterviewAnswerEvaluation, InterviewFinalEvaluation } from "@/types/practice";
 import { createRequestGuard, getStepAvailability, inputsAreDisabled, stepAfterAnalysisCompletes } from "@/lib/workflow/workflowState";
 
 type FormErrors = {
@@ -72,10 +73,17 @@ export default function Home() {
   const [practiceError, setPracticeError] = useState<string | null>(null);
   const [practiceEvaluation, setPracticeEvaluation] = useState<InterviewAnswerEvaluation | null>(null);
   const [lastEvaluatedAnswerSnapshot, setLastEvaluatedAnswerSnapshot] = useState<string | null>(null);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpAnswer, setFollowUpAnswer] = useState("");
+  const [followUpSubmitting, setFollowUpSubmitting] = useState(false);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const [finalEvaluation, setFinalEvaluation] = useState<InterviewFinalEvaluation | null>(null);
   const practiceRequestId = useRef(0);
   const practiceSessions = useRef(createPracticeSessionStore<InterviewPreparation["questions"][number], InterviewAnswerEvaluation>());
   const practiceLocale = useRef<SupportedLocale>(DEFAULT_LOCALE);
   const practiceRequest = useRef(createPracticeEvaluationRequestController());
+  const followUpRequestId = useRef(0);
+  const followUpRequest = useRef(createFollowUpEvaluationRequestController());
   const analysisGuard = useRef(createRequestGuard());
   const preparationGuard = useRef(createRequestGuard());
   const moreQuestionsGuard = useRef(createRequestGuard());
@@ -84,7 +92,7 @@ export default function Home() {
   const inputDisabled = inputsAreDisabled({ analysisLoading, preparationLoading }) || moreQuestionsLoading;
 
   useEffect(() => {
-    const evaluationRequest = practiceRequest.current;
+    const evaluationRequest = practiceRequest.current; const finalEvaluationRequest = followUpRequest.current;
     const timer = window.setTimeout(() => {
       const initialLocale = resolveInitialLocale(localStorage.getItem(LOCALE_STORAGE_KEY), navigator.language);
       practiceLocale.current = initialLocale;
@@ -93,6 +101,7 @@ export default function Home() {
     return () => {
       window.clearTimeout(timer);
       evaluationRequest.cancel();
+      finalEvaluationRequest.cancel();
     };
   }, []);
 
@@ -120,6 +129,7 @@ export default function Home() {
     const localeStrategy = getPracticeLocaleChangeStrategy({ hasActivePractice: Boolean(selectedPracticeQuestion), hasAnalysisState: Boolean(analysisResult || preparation || analysisAttempted) });
     if (localeStrategy === "preserve-practice") {
       if (practiceSubmitting) { cancelPracticeSubmission(); setPracticeError(translate(nextLocale, "evaluationCancelledForLanguage")); }
+      if (followUpSubmitting) { cancelFollowUpSubmission(); setFollowUpError(translate(nextLocale, "evaluationCancelledForLanguage")); }
       return;
     }
     if (localeStrategy === "reset-analysis-and-practice") { resetPractice(); setAnalysisResult(null); setPreparation(null); setAnalysisError(null); setPreparationError(null); setMoreQuestionsError(null); setMoreQuestionsStatus(null); setAnalysisAttempted(false); setAnalysisStage("idle"); setStatus("idle"); setActiveStep(1); setLanguageChangeNotice(true); }
@@ -131,26 +141,33 @@ export default function Home() {
     setPracticeSubmitting(false);
   }
 
+  function cancelFollowUpSubmission() { followUpRequestId.current += 1; followUpRequest.current.cancel(); setFollowUpSubmitting(false); }
+
   function resetPractice() {
     cancelPracticeSubmission();
+    cancelFollowUpSubmission();
     practiceSessions.current.clear();
-    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null); setLastEvaluatedAnswerSnapshot(null);
+    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null); setLastEvaluatedAnswerSnapshot(null); setFollowUpOpen(false); setFollowUpAnswer(""); setFollowUpError(null); setFinalEvaluation(null);
   }
 
   function startPractice(question: InterviewPreparation["questions"][number], index: number) {
     cancelPracticeSubmission();
+    cancelFollowUpSubmission();
     const session = practiceSessions.current.get(question);
-    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(session.answer); setPracticeError(null); setPracticeEvaluation(session.evaluation); setLastEvaluatedAnswerSnapshot(session.lastEvaluatedAnswerSnapshot);
+    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(session.answer); setPracticeError(null); setPracticeEvaluation(session.evaluation); setLastEvaluatedAnswerSnapshot(session.lastEvaluatedAnswerSnapshot); setFollowUpOpen(session.followUpOpen); setFollowUpAnswer(session.followUpAnswer); setFollowUpError(session.followUpError); setFinalEvaluation(session.finalEvaluation as InterviewFinalEvaluation | null);
   }
 
   function returnToQuestionList() {
     cancelPracticeSubmission();
+    cancelFollowUpSubmission();
     setSelectedPracticeQuestion(null);
   }
 
   function updatePracticeAnswer(answer: string) {
+    cancelFollowUpSubmission();
     setPracticeAnswer(answer);
-    if (selectedPracticeQuestion) practiceSessions.current.save(selectedPracticeQuestion.question, { answer, evaluation: practiceEvaluation, lastEvaluatedAnswerSnapshot });
+    setFollowUpOpen(false); setFollowUpAnswer(""); setFollowUpError(null); setFinalEvaluation(null);
+    if (selectedPracticeQuestion) practiceSessions.current.save(selectedPracticeQuestion.question, { answer, evaluation: practiceEvaluation, lastEvaluatedAnswerSnapshot, followUpOpen: false, followUpAnswer: "", followUpError: null, finalEvaluation: null });
     if (practiceError) setPracticeError(null);
   }
 
@@ -171,8 +188,31 @@ export default function Home() {
     if (practiceRequestId.current !== requestId || result.status !== "completed") return;
     setPracticeSubmitting(false);
     if (!result.response.success) { setPracticeError(localizedPracticeEvaluationError(result.response.error.code)); return; }
-    setPracticeEvaluation(result.response.data); setLastEvaluatedAnswerSnapshot(submittedAnswer);
-    practiceSessions.current.save(submittedQuestion, { answer: submittedAnswer, evaluation: result.response.data, lastEvaluatedAnswerSnapshot: submittedAnswer });
+    setPracticeEvaluation(result.response.data); setLastEvaluatedAnswerSnapshot(submittedAnswer); setFollowUpOpen(false); setFollowUpAnswer(""); setFollowUpError(null); setFinalEvaluation(null);
+    practiceSessions.current.save(submittedQuestion, { answer: submittedAnswer, evaluation: result.response.data, lastEvaluatedAnswerSnapshot: submittedAnswer, followUpOpen: false, followUpAnswer: "", followUpError: null, finalEvaluation: null });
+  }
+
+  function saveFollowUpState(changes: { followUpOpen?: boolean; followUpAnswer?: string; followUpError?: string | null; finalEvaluation?: InterviewFinalEvaluation | null }) {
+    if (!selectedPracticeQuestion) return;
+    const current = practiceSessions.current.get(selectedPracticeQuestion.question);
+    practiceSessions.current.save(selectedPracticeQuestion.question, { ...current, ...changes });
+  }
+
+  function openFollowUp() { if (!practiceEvaluation?.needsFollowUp || finalEvaluation) return; setFollowUpOpen(true); setFollowUpError(null); saveFollowUpState({ followUpOpen: true, followUpError: null }); }
+  function cancelFollowUp() { if (followUpSubmitting) return; setFollowUpOpen(false); setFollowUpError(null); saveFollowUpState({ followUpOpen: false, followUpError: null }); }
+  function updateFollowUpAnswer(answer: string) { setFollowUpAnswer(answer); setFollowUpError(null); saveFollowUpState({ followUpAnswer: answer, followUpError: null }); }
+
+  async function submitFollowUpAnswer() {
+    if (followUpSubmitting || followUpRequest.current.hasPending() || !selectedPracticeQuestion || !practiceEvaluation?.needsFollowUp || !practiceEvaluation.suggestedFollowUpQuestion || finalEvaluation || !isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)) return;
+    const validationError = validateFollowUpAnswer(followUpAnswer);
+    if (validationError) { const key = validationError === "required" ? "followUpRequired" : validationError === "tooShort" ? "followUpTooShort" : "followUpTooLong"; const message = translate(locale, key); setFollowUpError(message); saveFollowUpState({ followUpError: message }); return; }
+    const requestId = ++followUpRequestId.current; const submittedQuestion = selectedPracticeQuestion.question; const submittedFollowUp = followUpAnswer; const originalAnswer = practiceAnswer; const followUpQuestion = practiceEvaluation.suggestedFollowUpQuestion;
+    setFollowUpSubmitting(true); setFollowUpError(null); saveFollowUpState({ followUpError: null });
+    const result = await followUpRequest.current.submit(buildFollowUpEvaluationRequest(submittedQuestion, originalAnswer, followUpQuestion, submittedFollowUp, practiceLocale.current));
+    if (followUpRequestId.current !== requestId || result.status !== "completed") return;
+    setFollowUpSubmitting(false);
+    if (!result.response.success) { const message = result.response.error.code === "AI_NOT_CONFIGURED" ? translate(locale, "followUpEvaluationNotConfigured") : translate(locale, "followUpEvaluationFailed"); setFollowUpError(message); saveFollowUpState({ followUpError: message }); return; }
+    const finalResult = result.response.data.finalEvaluation; setFinalEvaluation(finalResult); setFollowUpOpen(false); saveFollowUpState({ followUpOpen: false, followUpAnswer: submittedFollowUp, followUpError: null, finalEvaluation: finalResult });
   }
 
   function handleResumeSelect(file: File) {
@@ -443,7 +483,7 @@ export default function Home() {
         {activeStep === 3 && analysisResult ? (
           <AnalysisResultPanel locale={locale} result={analysisResult} />
         ) : null}
-        {activeStep === 4 && analysisResult && selectedPracticeQuestion ? <InterviewPracticePanel locale={locale} question={selectedPracticeQuestion.question} number={selectedPracticeQuestion.index + 1} answer={practiceAnswer} submitting={practiceSubmitting} error={practiceError} evaluation={practiceEvaluation} evaluationCurrent={isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)} onAnswerChange={updatePracticeAnswer} onSubmit={submitPracticeAnswer} onBack={returnToQuestionList} /> : null}
+        {activeStep === 4 && analysisResult && selectedPracticeQuestion ? <InterviewPracticePanel locale={locale} question={selectedPracticeQuestion.question} number={selectedPracticeQuestion.index + 1} answer={practiceAnswer} submitting={practiceSubmitting} error={practiceError} evaluation={practiceEvaluation} evaluationCurrent={isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)} followUpOpen={followUpOpen} followUpAnswer={followUpAnswer} followUpSubmitting={followUpSubmitting} followUpError={followUpError} finalEvaluation={finalEvaluation} onAnswerChange={updatePracticeAnswer} onSubmit={submitPracticeAnswer} onBack={returnToQuestionList} onFollowUpOpen={openFollowUp} onFollowUpCancel={cancelFollowUp} onFollowUpAnswerChange={updateFollowUpAnswer} onFollowUpSubmit={submitFollowUpAnswer} /> : null}
         {activeStep === 4 && analysisResult && !selectedPracticeQuestion ? <InterviewPreparationPanel locale={locale} preparation={preparation} loading={preparationLoading} error={preparationError} onGenerate={handlePrepare} moreLoading={moreQuestionsLoading} moreError={moreQuestionsError} moreStatus={moreQuestionsStatus} onGenerateMore={handleGenerateMoreQuestions} onPractice={startPractice} /> : null}
       </main>
     </div>

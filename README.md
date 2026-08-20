@@ -56,6 +56,10 @@ Interview preparation now includes an in-memory single-question practice view. U
 
 Each question keeps its answer and latest evaluation in page memory. If the answer changes after evaluation, the old result is hidden until the user explicitly submits again. Improved answers must preserve facts from the submitted answer; resume-only details may be suggested but not silently inserted, and JD evidence is relevance context rather than candidate experience.
 
+## Phase 4B-1
+
+When an initial evaluation identifies one material gap, the user may explicitly answer its single suggested follow-up. `POST /api/interview/practice/follow-up/evaluate` sends only the selected question context, original answer, follow-up question, follow-up answer, and current output language to Gemini. The final evaluation combines both answers, is kept per question in memory, and is constrained to `needsFollowUp: false` and `suggestedFollowUpQuestion: null`, so no second follow-up or agent loop can start.
+
 ## Install
 
 ```bash
