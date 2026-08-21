@@ -21,4 +21,5 @@ describe("locales", () => {
     expect(messages[locale].retryPreparation).toBeTruthy();
   });
   it.each(["zh-TW", "zh-CN", "en"] as const)("has the stale evaluation notice for %s", (locale) => expect(messages[locale].answerChangedEvaluationStale).toBeTruthy());
+  it.each(["zh-TW", "zh-CN", "en"] as const)("has every follow-up stop reason for %s", (locale) => { expect(messages[locale].followUpStopAnswerComplete).toBeTruthy(); expect(messages[locale].followUpStopMaxRounds).toBeTruthy(); expect(messages[locale].followUpStopUserEnded).toBeTruthy(); expect(messages[locale].followUpStopNoMaterialGap).toBeTruthy(); expect(messages[locale].followUpStopDuplicate).toBeTruthy(); });
 });

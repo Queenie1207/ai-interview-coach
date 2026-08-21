@@ -104,6 +104,8 @@ Practice answers, evaluations, and the last evaluated answer snapshot are kept p
 
 Phase 4B-1 adds a separate explicit follow-up flow. The browser calls `POST /api/interview/practice/follow-up/evaluate` only after the user opens and submits the one follow-up form. The allowlisted payload contains one question's context, original answer, follow-up question and answer, and output language; it excludes the full resume, Job Description, analysis, preparation, other questions, and other answers. A separate abortable controller and generation guard prevent duplicate and stale writes. Each in-memory question session retains its follow-up draft, error, open state, and final evaluation. Editing the original answer invalidates the follow-up and final result. The final Zod and provider schemas force the flow to end without another follow-up.
 
+Phase 4B-2 extends that endpoint and per-question state into a bounded state machine. `followUpHistory` contains consecutive completed turns and the server derives the round count rather than accepting a client maximum. One explicit answer or finish action produces one request and at most one Gemini call. A discriminated continue/complete schema controls the result; server guards force completion after the third answer, on user finish, or when normalized question text duplicates history. Abort, request-id, and generation guards prevent stale writes, while editing the original answer truncates all dependent follow-up state.
+
 ## Deferred work
 
 Future phases may add JD matching, interview analysis, OCR, RAG, and Tool Calling. None are implemented in Phase 2B.

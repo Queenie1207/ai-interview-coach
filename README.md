@@ -60,6 +60,10 @@ Each question keeps its answer and latest evaluation in page memory. If the answ
 
 When an initial evaluation identifies one material gap, the user may explicitly answer its single suggested follow-up. `POST /api/interview/practice/follow-up/evaluate` sends only the selected question context, original answer, follow-up question, follow-up answer, and current output language to Gemini. The final evaluation combines both answers, is kept per question in memory, and is constrained to `needsFollowUp: false` and `suggestedFollowUpQuestion: null`, so no second follow-up or agent loop can start.
 
+## Phase 4B-2
+
+Practice follow-up is now a bounded multi-round flow with at most three user-submitted follow-up turns. The same follow-up endpoint accepts only one question's context, the original answer, validated consecutive follow-up history, output language, and a continue/finish intent. Each explicit submission makes one abortable browser request and at most one Gemini call; the server computes the current round, enforces the limit, rejects malformed history, and deterministically ends on duplicate questions. Users may finish early, and all history, pending drafts, evaluations, errors, and completion state remain isolated per question in memory.
+
 ## Install
 
 ```bash

@@ -1,14 +1,14 @@
 import type { SupportedLocale } from "@/lib/i18n/locales";
 import type { InterviewPreparation } from "@/types/preparation";
-import type { InterviewFollowUpEvaluationRequest, InterviewFollowUpEvaluationResponse } from "@/types/practice";
+import type { FollowUpTurn, InterviewFollowUpEvaluationRequest, InterviewFollowUpEvaluationResponse } from "@/types/practice";
 
 type Question = InterviewPreparation["questions"][number];
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type FollowUpRequestResult = { status: "completed"; response: InterviewFollowUpEvaluationResponse } | { status: "duplicate" | "stale" };
 
-export function buildFollowUpEvaluationRequest(question: Question, originalAnswer: string, followUpQuestion: string, followUpAnswer: string, outputLanguage: SupportedLocale): InterviewFollowUpEvaluationRequest {
+export function buildFollowUpEvaluationRequest(question: Question, originalAnswer: string, followUpHistory: FollowUpTurn[], outputLanguage: SupportedLocale, intent: "continue" | "finish"): InterviewFollowUpEvaluationRequest {
   const nonEmpty = (values: string[]) => values.map((value) => value.trim()).filter(Boolean);
-  return { question: question.question.trim(), category: question.category, difficulty: question.difficulty, whyAsked: question.whyAsked.trim(), relatedRequirement: question.relatedRequirement?.trim() || null, resumeEvidence: nonEmpty(question.resumeEvidence), jdEvidence: nonEmpty(question.jdEvidence), answerOutline: nonEmpty(question.answerOutline), originalAnswer: originalAnswer.trim(), followUpQuestion: followUpQuestion.trim(), followUpAnswer: followUpAnswer.trim(), outputLanguage };
+  return { question: question.question.trim(), category: question.category, difficulty: question.difficulty, whyAsked: question.whyAsked.trim(), relatedRequirement: question.relatedRequirement?.trim() || null, resumeEvidence: nonEmpty(question.resumeEvidence), jdEvidence: nonEmpty(question.jdEvidence), answerOutline: nonEmpty(question.answerOutline), originalAnswer: originalAnswer.trim(), followUpHistory: followUpHistory.map((turn) => ({ round: turn.round, question: turn.question.trim(), answer: turn.answer.trim() })), outputLanguage, intent };
 }
 
 export function createFollowUpEvaluationRequestController(fetcher: Fetcher = fetch) {

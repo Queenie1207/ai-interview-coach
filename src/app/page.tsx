@@ -24,7 +24,7 @@ import { validateResumeFile } from "@/utils/fileValidation";
 import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, resolveInitialLocale, type SupportedLocale } from "@/lib/i18n/locales";
 import { translate, type MessageKey } from "@/lib/i18n/messages";
 import type { InterviewPreparation, InterviewPreparationResponse, MoreInterviewQuestionsResponse } from "@/types/preparation";
-import type { InterviewAnswerEvaluation, InterviewFinalEvaluation } from "@/types/practice";
+import type { FollowUpStopReason, FollowUpTurn, InterviewAnswerEvaluation, InterviewFinalEvaluation, PracticeFollowUpStatus } from "@/types/practice";
 import { createRequestGuard, getStepAvailability, inputsAreDisabled, stepAfterAnalysisCompletes } from "@/lib/workflow/workflowState";
 
 type FormErrors = {
@@ -73,11 +73,15 @@ export default function Home() {
   const [practiceError, setPracticeError] = useState<string | null>(null);
   const [practiceEvaluation, setPracticeEvaluation] = useState<InterviewAnswerEvaluation | null>(null);
   const [lastEvaluatedAnswerSnapshot, setLastEvaluatedAnswerSnapshot] = useState<string | null>(null);
-  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpHistory, setFollowUpHistory] = useState<FollowUpTurn[]>([]);
+  const [pendingFollowUpQuestion, setPendingFollowUpQuestion] = useState<string | null>(null);
   const [followUpAnswer, setFollowUpAnswer] = useState("");
   const [followUpSubmitting, setFollowUpSubmitting] = useState(false);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [finalEvaluation, setFinalEvaluation] = useState<InterviewFinalEvaluation | null>(null);
+  const [, setCurrentEvaluation] = useState<InterviewAnswerEvaluation | null>(null);
+  const [followUpStatus, setFollowUpStatus] = useState<PracticeFollowUpStatus>("idle");
+  const [stopReason, setStopReason] = useState<FollowUpStopReason | null>(null);
   const practiceRequestId = useRef(0);
   const practiceSessions = useRef(createPracticeSessionStore<InterviewPreparation["questions"][number], InterviewAnswerEvaluation>());
   const practiceLocale = useRef<SupportedLocale>(DEFAULT_LOCALE);
@@ -141,20 +145,30 @@ export default function Home() {
     setPracticeSubmitting(false);
   }
 
-  function cancelFollowUpSubmission() { followUpRequestId.current += 1; followUpRequest.current.cancel(); setFollowUpSubmitting(false); }
+  function cancelFollowUpSubmission() {
+    followUpRequestId.current += 1;
+    followUpRequest.current.cancel();
+    setFollowUpSubmitting(false);
+    if (selectedPracticeQuestion && pendingFollowUpQuestion && !finalEvaluation) {
+      const status: PracticeFollowUpStatus = followUpHistory.length > 0 ? "awaiting_next_follow_up" : "awaiting_follow_up";
+      setFollowUpStatus(status);
+      const current = practiceSessions.current.get(selectedPracticeQuestion.question);
+      practiceSessions.current.save(selectedPracticeQuestion.question, { ...current, status });
+    }
+  }
 
   function resetPractice() {
     cancelPracticeSubmission();
     cancelFollowUpSubmission();
     practiceSessions.current.clear();
-    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null); setLastEvaluatedAnswerSnapshot(null); setFollowUpOpen(false); setFollowUpAnswer(""); setFollowUpError(null); setFinalEvaluation(null);
+    setSelectedPracticeQuestion(null); setPracticeAnswer(""); setPracticeError(null); setPracticeEvaluation(null); setLastEvaluatedAnswerSnapshot(null); setFollowUpHistory([]); setPendingFollowUpQuestion(null); setFollowUpAnswer(""); setFollowUpError(null); setCurrentEvaluation(null); setFinalEvaluation(null); setStopReason(null); setFollowUpStatus("idle");
   }
 
   function startPractice(question: InterviewPreparation["questions"][number], index: number) {
     cancelPracticeSubmission();
     cancelFollowUpSubmission();
     const session = practiceSessions.current.get(question);
-    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(session.answer); setPracticeError(null); setPracticeEvaluation(session.evaluation); setLastEvaluatedAnswerSnapshot(session.lastEvaluatedAnswerSnapshot); setFollowUpOpen(session.followUpOpen); setFollowUpAnswer(session.followUpAnswer); setFollowUpError(session.followUpError); setFinalEvaluation(session.finalEvaluation as InterviewFinalEvaluation | null);
+    setSelectedPracticeQuestion({ question, index }); setPracticeAnswer(session.answer); setPracticeError(null); setPracticeEvaluation(session.evaluation); setLastEvaluatedAnswerSnapshot(session.lastEvaluatedAnswerSnapshot); setFollowUpHistory(session.followUpHistory); setPendingFollowUpQuestion(session.pendingFollowUpQuestion); setFollowUpAnswer(session.currentFollowUpAnswer); setFollowUpError(session.followUpError); setCurrentEvaluation(session.currentEvaluation); setFinalEvaluation(session.finalEvaluation as InterviewFinalEvaluation | null); setStopReason(session.stopReason); setFollowUpStatus(session.status);
   }
 
   function returnToQuestionList() {
@@ -166,8 +180,8 @@ export default function Home() {
   function updatePracticeAnswer(answer: string) {
     cancelFollowUpSubmission();
     setPracticeAnswer(answer);
-    setFollowUpOpen(false); setFollowUpAnswer(""); setFollowUpError(null); setFinalEvaluation(null);
-    if (selectedPracticeQuestion) practiceSessions.current.save(selectedPracticeQuestion.question, { answer, evaluation: practiceEvaluation, lastEvaluatedAnswerSnapshot, followUpOpen: false, followUpAnswer: "", followUpError: null, finalEvaluation: null });
+    setFollowUpHistory([]); setPendingFollowUpQuestion(null); setFollowUpAnswer(""); setFollowUpError(null); setCurrentEvaluation(null); setFinalEvaluation(null); setStopReason(null); setFollowUpStatus("idle");
+    if (selectedPracticeQuestion) practiceSessions.current.save(selectedPracticeQuestion.question, { answer, evaluation: practiceEvaluation, lastEvaluatedAnswerSnapshot, followUpHistory: [], pendingFollowUpQuestion: null, currentFollowUpAnswer: "", followUpError: null, currentEvaluation: null, finalEvaluation: null, stopReason: null, status: "idle" });
     if (practiceError) setPracticeError(null);
   }
 
@@ -180,39 +194,52 @@ export default function Home() {
       return;
     }
     const requestId = ++practiceRequestId.current;
-    setPracticeError(null); setPracticeSubmitting(true);
+    setPracticeError(null); setPracticeSubmitting(true); setFollowUpStatus("evaluating_initial");
     const submittedAnswer = practiceAnswer;
     const submittedQuestion = selectedPracticeQuestion.question;
     const payload = buildPracticeEvaluationRequest(submittedQuestion, submittedAnswer, practiceLocale.current);
     const result = await practiceRequest.current.submit(payload);
     if (practiceRequestId.current !== requestId || result.status !== "completed") return;
     setPracticeSubmitting(false);
-    if (!result.response.success) { setPracticeError(localizedPracticeEvaluationError(result.response.error.code)); return; }
-    setPracticeEvaluation(result.response.data); setLastEvaluatedAnswerSnapshot(submittedAnswer); setFollowUpOpen(false); setFollowUpAnswer(""); setFollowUpError(null); setFinalEvaluation(null);
-    practiceSessions.current.save(submittedQuestion, { answer: submittedAnswer, evaluation: result.response.data, lastEvaluatedAnswerSnapshot: submittedAnswer, followUpOpen: false, followUpAnswer: "", followUpError: null, finalEvaluation: null });
+    if (!result.response.success) { setPracticeError(localizedPracticeEvaluationError(result.response.error.code)); setFollowUpStatus("error"); return; }
+    const pendingQuestion = result.response.data.needsFollowUp ? result.response.data.suggestedFollowUpQuestion : null;
+    const nextStatus: PracticeFollowUpStatus = pendingQuestion ? "awaiting_follow_up" : "completed";
+    const initialStopReason: FollowUpStopReason | null = pendingQuestion ? null : "no_material_gap";
+    setPracticeEvaluation(result.response.data); setLastEvaluatedAnswerSnapshot(submittedAnswer); setFollowUpHistory([]); setPendingFollowUpQuestion(pendingQuestion); setFollowUpAnswer(""); setFollowUpError(null); setCurrentEvaluation(result.response.data); setFinalEvaluation(null); setStopReason(initialStopReason); setFollowUpStatus(nextStatus);
+    practiceSessions.current.save(submittedQuestion, { answer: submittedAnswer, evaluation: result.response.data, lastEvaluatedAnswerSnapshot: submittedAnswer, followUpHistory: [], pendingFollowUpQuestion: pendingQuestion, currentFollowUpAnswer: "", followUpError: null, currentEvaluation: result.response.data, finalEvaluation: null, stopReason: initialStopReason, status: nextStatus });
   }
 
-  function saveFollowUpState(changes: { followUpOpen?: boolean; followUpAnswer?: string; followUpError?: string | null; finalEvaluation?: InterviewFinalEvaluation | null }) {
+  function saveFollowUpState(changes: Partial<ReturnType<typeof practiceSessions.current.get>>) {
     if (!selectedPracticeQuestion) return;
     const current = practiceSessions.current.get(selectedPracticeQuestion.question);
     practiceSessions.current.save(selectedPracticeQuestion.question, { ...current, ...changes });
   }
 
-  function openFollowUp() { if (!practiceEvaluation?.needsFollowUp || finalEvaluation) return; setFollowUpOpen(true); setFollowUpError(null); saveFollowUpState({ followUpOpen: true, followUpError: null }); }
-  function cancelFollowUp() { if (followUpSubmitting) return; setFollowUpOpen(false); setFollowUpError(null); saveFollowUpState({ followUpOpen: false, followUpError: null }); }
-  function updateFollowUpAnswer(answer: string) { setFollowUpAnswer(answer); setFollowUpError(null); saveFollowUpState({ followUpAnswer: answer, followUpError: null }); }
+  function updateFollowUpAnswer(answer: string) { setFollowUpAnswer(answer); setFollowUpError(null); saveFollowUpState({ currentFollowUpAnswer: answer, followUpError: null }); }
 
   async function submitFollowUpAnswer() {
-    if (followUpSubmitting || followUpRequest.current.hasPending() || !selectedPracticeQuestion || !practiceEvaluation?.needsFollowUp || !practiceEvaluation.suggestedFollowUpQuestion || finalEvaluation || !isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)) return;
+    if (followUpSubmitting || followUpRequest.current.hasPending() || !selectedPracticeQuestion || !pendingFollowUpQuestion || finalEvaluation || followUpStatus === "completed" || !isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)) return;
     const validationError = validateFollowUpAnswer(followUpAnswer);
     if (validationError) { const key = validationError === "required" ? "followUpRequired" : validationError === "tooShort" ? "followUpTooShort" : "followUpTooLong"; const message = translate(locale, key); setFollowUpError(message); saveFollowUpState({ followUpError: message }); return; }
-    const requestId = ++followUpRequestId.current; const submittedQuestion = selectedPracticeQuestion.question; const submittedFollowUp = followUpAnswer; const originalAnswer = practiceAnswer; const followUpQuestion = practiceEvaluation.suggestedFollowUpQuestion;
-    setFollowUpSubmitting(true); setFollowUpError(null); saveFollowUpState({ followUpError: null });
-    const result = await followUpRequest.current.submit(buildFollowUpEvaluationRequest(submittedQuestion, originalAnswer, followUpQuestion, submittedFollowUp, practiceLocale.current));
+    const requestId = ++followUpRequestId.current; const submittedQuestion = selectedPracticeQuestion.question; const submittedFollowUp = followUpAnswer; const originalAnswer = practiceAnswer; const nextHistory = [...followUpHistory, { round: followUpHistory.length + 1, question: pendingFollowUpQuestion, answer: submittedFollowUp }];
+    setFollowUpSubmitting(true); setFollowUpStatus("submitting_follow_up"); setFollowUpError(null); saveFollowUpState({ followUpError: null, status: "submitting_follow_up" });
+    const result = await followUpRequest.current.submit(buildFollowUpEvaluationRequest(submittedQuestion, originalAnswer, nextHistory, practiceLocale.current, "continue"));
     if (followUpRequestId.current !== requestId || result.status !== "completed") return;
     setFollowUpSubmitting(false);
-    if (!result.response.success) { const message = result.response.error.code === "AI_NOT_CONFIGURED" ? translate(locale, "followUpEvaluationNotConfigured") : translate(locale, "followUpEvaluationFailed"); setFollowUpError(message); saveFollowUpState({ followUpError: message }); return; }
-    const finalResult = result.response.data.finalEvaluation; setFinalEvaluation(finalResult); setFollowUpOpen(false); saveFollowUpState({ followUpOpen: false, followUpAnswer: submittedFollowUp, followUpError: null, finalEvaluation: finalResult });
+    if (!result.response.success) { const message = result.response.error.code === "AI_NOT_CONFIGURED" ? translate(locale, "followUpEvaluationNotConfigured") : translate(locale, "followUpEvaluationFailed"); setFollowUpError(message); setFollowUpStatus("error"); saveFollowUpState({ followUpError: message, status: "error" }); return; }
+    if (result.response.data.decision === "continue") { const data = result.response.data; setFollowUpHistory(nextHistory); setPendingFollowUpQuestion(data.nextFollowUpQuestion); setFollowUpAnswer(""); setCurrentEvaluation(data.currentEvaluation); setFollowUpStatus("awaiting_next_follow_up"); saveFollowUpState({ followUpHistory: nextHistory, pendingFollowUpQuestion: data.nextFollowUpQuestion, currentFollowUpAnswer: "", followUpError: null, currentEvaluation: data.currentEvaluation, status: "awaiting_next_follow_up" }); return; }
+    const data = result.response.data; setFollowUpHistory(nextHistory); setPendingFollowUpQuestion(null); setFollowUpAnswer(""); setFinalEvaluation(data.finalEvaluation); setStopReason(data.stopReason); setFollowUpStatus("completed"); saveFollowUpState({ followUpHistory: nextHistory, pendingFollowUpQuestion: null, currentFollowUpAnswer: "", followUpError: null, finalEvaluation: data.finalEvaluation, stopReason: data.stopReason, status: "completed" });
+  }
+
+  async function finishFollowUp() {
+    if (followUpSubmitting || followUpRequest.current.hasPending() || !selectedPracticeQuestion || !pendingFollowUpQuestion || finalEvaluation) return;
+    const requestId = ++followUpRequestId.current; const submittedQuestion = selectedPracticeQuestion.question;
+    setFollowUpSubmitting(true); setFollowUpStatus("finalizing"); setFollowUpError(null); saveFollowUpState({ status: "finalizing", followUpError: null });
+    const result = await followUpRequest.current.submit(buildFollowUpEvaluationRequest(submittedQuestion, practiceAnswer, followUpHistory, practiceLocale.current, "finish"));
+    if (followUpRequestId.current !== requestId || result.status !== "completed") return; setFollowUpSubmitting(false);
+    if (!result.response.success) { const message = translate(locale, "followUpEvaluationFailed"); setFollowUpError(message); setFollowUpStatus("error"); saveFollowUpState({ followUpError: message, status: "error" }); return; }
+    if (result.response.data.decision !== "complete") return;
+    const data = result.response.data; setPendingFollowUpQuestion(null); setFinalEvaluation(data.finalEvaluation); setStopReason(data.stopReason); setFollowUpStatus("completed"); saveFollowUpState({ pendingFollowUpQuestion: null, finalEvaluation: data.finalEvaluation, stopReason: data.stopReason, status: "completed" });
   }
 
   function handleResumeSelect(file: File) {
@@ -483,7 +510,7 @@ export default function Home() {
         {activeStep === 3 && analysisResult ? (
           <AnalysisResultPanel locale={locale} result={analysisResult} />
         ) : null}
-        {activeStep === 4 && analysisResult && selectedPracticeQuestion ? <InterviewPracticePanel locale={locale} question={selectedPracticeQuestion.question} number={selectedPracticeQuestion.index + 1} answer={practiceAnswer} submitting={practiceSubmitting} error={practiceError} evaluation={practiceEvaluation} evaluationCurrent={isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)} followUpOpen={followUpOpen} followUpAnswer={followUpAnswer} followUpSubmitting={followUpSubmitting} followUpError={followUpError} finalEvaluation={finalEvaluation} onAnswerChange={updatePracticeAnswer} onSubmit={submitPracticeAnswer} onBack={returnToQuestionList} onFollowUpOpen={openFollowUp} onFollowUpCancel={cancelFollowUp} onFollowUpAnswerChange={updateFollowUpAnswer} onFollowUpSubmit={submitFollowUpAnswer} /> : null}
+        {activeStep === 4 && analysisResult && selectedPracticeQuestion ? <InterviewPracticePanel locale={locale} question={selectedPracticeQuestion.question} number={selectedPracticeQuestion.index + 1} answer={practiceAnswer} submitting={practiceSubmitting} error={practiceError} evaluation={practiceEvaluation} evaluationCurrent={isEvaluationCurrent(practiceAnswer, lastEvaluatedAnswerSnapshot)} followUpHistory={followUpHistory} pendingFollowUpQuestion={pendingFollowUpQuestion} followUpAnswer={followUpAnswer} followUpSubmitting={followUpSubmitting} followUpError={followUpError} finalEvaluation={finalEvaluation} stopReason={stopReason} onAnswerChange={updatePracticeAnswer} onSubmit={submitPracticeAnswer} onBack={returnToQuestionList} onFollowUpAnswerChange={updateFollowUpAnswer} onFollowUpSubmit={submitFollowUpAnswer} onFollowUpFinish={finishFollowUp} /> : null}
         {activeStep === 4 && analysisResult && !selectedPracticeQuestion ? <InterviewPreparationPanel locale={locale} preparation={preparation} loading={preparationLoading} error={preparationError} onGenerate={handlePrepare} moreLoading={moreQuestionsLoading} moreError={moreQuestionsError} moreStatus={moreQuestionsStatus} onGenerateMore={handleGenerateMoreQuestions} onPractice={startPractice} /> : null}
       </main>
     </div>

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { AiNotConfiguredError } from "@/lib/ai/geminiClient";
 import { evaluateInterviewFollowUp, FollowUpEvaluationAuthenticationError, FollowUpEvaluationEmptyOutputError, FollowUpEvaluationInvalidJsonError, FollowUpEvaluationInvalidOutputError, FollowUpEvaluationRateLimitedError, FollowUpEvaluationUpstreamError } from "@/lib/ai/evaluateInterviewFollowUp";
 import { InterviewFollowUpEvaluationRequestSchema } from "@/lib/schemas/interviewFollowUpEvaluationRequestSchema";
+import { isDuplicateFollowUpQuestion, MAX_FOLLOW_UP_ROUNDS } from "@/lib/practice/followUpFlow";
+import type { InterviewAnswerEvaluation, InterviewFinalEvaluation, InterviewFollowUpDecision } from "@/types/practice";
 import type { FollowUpEvaluationErrorCode, InterviewFollowUpEvaluationResponse } from "@/types/practice";
 
 export const runtime = "nodejs";
@@ -19,16 +21,25 @@ export async function POST(request: Request) {
     if (length < 20) return failure("ORIGINAL_ANSWER_TOO_SHORT", "Original answer must be at least 20 characters.", 422);
     if (length > 5000) return failure("ORIGINAL_ANSWER_TOO_LONG", "Original answer must be no more than 5000 characters.", 422);
   }
-  if (typeof value.followUpAnswer === "string") {
-    const length = value.followUpAnswer.trim().length;
-    if (length < 10) return failure("FOLLOW_UP_ANSWER_TOO_SHORT", "Follow-up answer must be at least 10 characters.", 422);
-    if (length > 3000) return failure("FOLLOW_UP_ANSWER_TOO_LONG", "Follow-up answer must be no more than 3000 characters.", 422);
+  if (Array.isArray(value.followUpHistory)) {
+    if (value.followUpHistory.length > MAX_FOLLOW_UP_ROUNDS) return failure("MAX_ROUNDS_REACHED", "The maximum number of follow-up rounds has been reached.", 422);
+    for (const turn of value.followUpHistory) if (typeof turn === "object" && turn !== null) {
+      const answer = (turn as Record<string, unknown>).answer;
+      if (typeof answer === "string" && answer.trim().length < 10) return failure("FOLLOW_UP_ANSWER_TOO_SHORT", "Follow-up answer must be at least 10 characters.", 422);
+      if (typeof answer === "string" && answer.trim().length > 3000) return failure("FOLLOW_UP_ANSWER_TOO_LONG", "Follow-up answer must be no more than 3000 characters.", 422);
+    }
   }
   const parsed = InterviewFollowUpEvaluationRequestSchema.safeParse(value);
-  if (!parsed.success) return failure("INVALID_REQUEST", "Request body contains missing, unsupported, or invalid fields.", 422);
+  if (!parsed.success) {
+    const historyIssue = parsed.error.issues.some((issue) => issue.path[0] === "followUpHistory");
+    const roundIssue = parsed.error.issues.some((issue) => issue.path.includes("round"));
+    return failure(roundIssue ? "INVALID_ROUND" : historyIssue ? "INVALID_HISTORY" : "INVALID_REQUEST", "Request body contains missing, unsupported, or invalid fields.", 422);
+  }
   try {
-    const finalEvaluation = await evaluateInterviewFollowUp(parsed.data);
-    return NextResponse.json<InterviewFollowUpEvaluationResponse>({ success: true, data: { finalEvaluation } });
+    const aiDecision = await evaluateInterviewFollowUp(parsed.data);
+    const currentRound = parsed.data.followUpHistory.length;
+    const decision = enforceDecision(aiDecision, parsed.data.intent, currentRound, parsed.data.followUpHistory.map((turn) => turn.question));
+    return NextResponse.json<InterviewFollowUpEvaluationResponse>({ success: true, data: decision });
   } catch (error) {
     const mappings: Array<[new (...args: never[]) => Error, FollowUpEvaluationErrorCode, string, number]> = [
       [AiNotConfiguredError, "AI_NOT_CONFIGURED", "Final evaluation is not configured on the server.", 503],
@@ -42,4 +53,15 @@ export async function POST(request: Request) {
     for (const [ErrorType, code, message, status] of mappings) if (error instanceof ErrorType) { safeLog(code, status); return failure(code, message, status); }
     safeLog("INTERNAL_ERROR", 500); return failure("INTERNAL_ERROR", "An unexpected error occurred. Please try again.", 500);
   }
+}
+
+function toFinalEvaluation(evaluation: InterviewAnswerEvaluation): InterviewFinalEvaluation { return { ...evaluation, needsFollowUp: false, suggestedFollowUpQuestion: null }; }
+function enforceDecision(decision: InterviewFollowUpDecision, intent: "continue" | "finish", currentRound: number, historyQuestions: string[]): InterviewFollowUpDecision {
+  if (decision.decision === "complete") {
+    if (intent === "finish") return { ...decision, stopReason: "user_ended" };
+    return decision;
+  }
+  const forcedReason = intent === "finish" ? "user_ended" : currentRound >= MAX_FOLLOW_UP_ROUNDS ? "max_rounds_reached" : isDuplicateFollowUpQuestion(decision.nextFollowUpQuestion, historyQuestions) ? "duplicate_follow_up" : null;
+  if (!forcedReason) return decision;
+  return { decision: "complete", stopReason: forcedReason, nextFollowUpQuestion: null, finalEvaluation: toFinalEvaluation(decision.currentEvaluation) };
 }

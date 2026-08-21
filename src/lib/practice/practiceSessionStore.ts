@@ -1,15 +1,21 @@
+import type { FollowUpStopReason, FollowUpTurn, PracticeFollowUpStatus } from "@/types/practice";
+
 export type PracticeSession<Evaluation> = {
   answer: string;
   evaluation: Evaluation | null;
   lastEvaluatedAnswerSnapshot: string | null;
-  followUpOpen: boolean;
-  followUpAnswer: string;
+  followUpHistory: FollowUpTurn[];
+  pendingFollowUpQuestion: string | null;
+  currentFollowUpAnswer: string;
   followUpError: string | null;
+  currentEvaluation: Evaluation | null;
   finalEvaluation: Evaluation | null;
+  stopReason: FollowUpStopReason | null;
+  status: PracticeFollowUpStatus;
 };
 
 export function emptyPracticeSession<Evaluation>(): PracticeSession<Evaluation> {
-  return { answer: "", evaluation: null, lastEvaluatedAnswerSnapshot: null, followUpOpen: false, followUpAnswer: "", followUpError: null, finalEvaluation: null };
+  return { answer: "", evaluation: null, lastEvaluatedAnswerSnapshot: null, followUpHistory: [], pendingFollowUpQuestion: null, currentFollowUpAnswer: "", followUpError: null, currentEvaluation: null, finalEvaluation: null, stopReason: null, status: "idle" };
 }
 
 export function createPracticeSessionStore<Question extends object, Evaluation>() {
